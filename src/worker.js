@@ -367,8 +367,16 @@ async function siteLead(req,env){
  const requestId=clean(body.request_id,70);
  if(requestId && !/^[a-f0-9-]{36}$/i.test(requestId))return fail('Identificador da solicitação inválido.');
  if(requestId){const prior=await env.DB.prepare('SELECT event_id FROM integration_events WHERE event_id=?').bind(requestId).first();if(prior)return response({ok:true,message:'Solicitação recebida anteriormente.'},200,{'Access-Control-Allow-Origin':env.SITE_ORIGIN,'Vary':'Origin'});}
- const result=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({secret:env.TURNSTILE_SECRET,response:token,remoteip:req.headers.get('CF-Connecting-IP')||''})});
- const proof=await result.json();if(!proof.success||proof.hostname!==new URL(env.SITE_ORIGIN).hostname||proof.action!=='crm_request')return fail('Não foi possível validar o formulário.',403);
+ let proof;
+ try{
+  const result=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:AbortSignal.timeout(10000),body:new URLSearchParams({secret:env.TURNSTILE_SECRET,response:token,remoteip:req.headers.get('CF-Connecting-IP')||''})});
+  if(!result.ok)throw new Error('siteverify '+result.status);
+  proof=await result.json();
+ }catch(error){
+  console.error(JSON.stringify({message:'turnstile verification failed',error:error instanceof Error?error.message:String(error)}));
+  return fail('Não foi possível validar o formulário.',403);
+ }
+ if(!proof.success||proof.hostname!==new URL(env.SITE_ORIGIN).hostname||proof.action!=='crm_request')return fail('Não foi possível validar o formulário.',403);
  const name=clean(body.name,120),phone=clean(body.phone,24),email=clean(body.email,160).toLowerCase(),segment=choice(body.segment||'varejo',SEGMENTS,'Perfil'),message=clean(body.message,1200);
  if(name.length<2||(!phone&&!email)||!phoneOk(phone)||!emailOk(email))return fail('Informe nome e um contato válido.');
  const ip=await sha((req.headers.get('CF-Connecting-IP')||'unknown')+'|'+env.FORM_SALT);
