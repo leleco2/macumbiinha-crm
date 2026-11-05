@@ -106,9 +106,12 @@ try{
    assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'dark');
    await page.locator('.quick-create').click();
    await page.locator('#modal-layer .modal').waitFor();
+   console.log('order form validity',await page.locator('#order-form').evaluate(n=>({valid:n.checkValidity(),invalid:[...n.querySelectorAll(':invalid')].map(x=>({name:x.name,message:x.validationMessage})),fields:[...n.querySelectorAll('input,select')].map(x=>({name:x.name,value:x.value}))})));
    await page.locator('#order-form button[type="submit"]').click();
+   await page.waitForTimeout(350);
+   console.log('order requests',JSON.stringify(requests.slice(-12)),'modal still exists',await page.locator('#order-form').count());
+   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='orders'),'Order creation should submit to API: '+JSON.stringify(requests.slice(-12)));
    await page.locator('#modal-layer .modal').waitFor({state:'hidden'});
-   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='orders'),'Order creation should submit to API');
   }
   assert.deepEqual(errors,[],v.name+' browser errors');
   console.log(v.name+': 9 menus, form actions, theme, command palette, quick-create passed; API calls '+requests.length);
