@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/deploy-crm.yml"
+      - "public/**"
+      - "src/**"
+      - "scripts/**"
+      - "tests/**"
+      - "package.json"
+      - "wrangler.jsonc"
 
 permissions:
   contents: read
@@ -42,6 +48,9 @@ jobs:
             exit 1
           fi
 
+      - name: Gerar favicon e ícones PWA atualizados
+        run: npm run build:icons
+
       - name: Publicar Worker e arquivos PWA (sem alterar o D1)
         uses: cloudflare/wrangler-action@v3
         with:
@@ -61,7 +70,7 @@ jobs:
             if [ "$attempt" = 5 ]; then exit 1; fi
             sleep 8
           done
-          curl --fail --silent --show-error "$BASE_URL/" | grep -F "Macumbiinha | CRM & ERP"
+          curl --fail --silent --show-error "$BASE_URL/" | grep -F "Macumbiinha — Gestão e Operação"
           curl --fail --silent --show-error "$BASE_URL/finance-analytics.js" | grep -F "Read-only visualizations"
           curl --fail --silent --show-error "$BASE_URL/experience.js" | grep -F "install"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$BASE_URL/api/dashboard")" = "401"
