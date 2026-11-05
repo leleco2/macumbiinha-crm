@@ -22,7 +22,7 @@ function installHint(){return apple()?'No Safari, toque em Compartilhar e depois
 function hideBanner(){document.getElementById('crm-install-banner')?.remove()}
 function dismissedRecently(){const last=Number(safeStorage.get(INSTALL_DISMISSED_KEY));return Number.isFinite(last)&&last>0&&Date.now()-last<WEEK}
 function buildBanner(){
- if(!isAuthenticated||standalone()||dismissedRecently()||!mobile())return;
+ if(document.documentElement.dataset.accessPrompt==='enabled'||!isAuthenticated||standalone()||dismissedRecently()||!mobile())return;
  if(document.getElementById('crm-install-banner'))return;
  const banner=document.createElement('aside');banner.id='crm-install-banner';banner.className='crm-install-banner';banner.setAttribute('role','region');banner.setAttribute('aria-label','Instalar CRM no celular');
  banner.innerHTML=`<div class="install-app-icon" aria-hidden="true"><img src="/icon.svg" alt=""></div><div class="install-app-text"><span class="install-app-kicker">MACUMBIINHA · NO SEU CELULAR</span><strong>Seu CRM, sempre à mão.</strong><p>Acesse pedidos, estoque, vendas e alertas diretamente da tela inicial.</p></div><div class="install-app-controls"><button class="install-app-cta" type="button" data-experience="install">${deferredInstall?'Instalar agora':'Como instalar'} <span aria-hidden="true">↗</span></button></div><button type="button" class="install-app-dismiss" data-experience="dismiss" aria-label="Fechar convite de instalação">×</button>`;
