@@ -1,7 +1,7 @@
 name: Navegação funcional — Chromium
 on:
   push:
-    branches: [design/operational-studio-20261105, feat/commerce-hub-20261105, feat/product-variants-gallery-20261105]
+    branches: [design/operational-studio-20261105, feat/commerce-hub-20261105, feat/product-variants-gallery-20261105, feat/access-app-notifications-popup-20261105]
   workflow_dispatch:
 
 permissions:
