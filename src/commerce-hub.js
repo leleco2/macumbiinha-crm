@@ -1,6 +1,7 @@
 /* Macumbiinha Commerce Hub: catalog owner, inventory controls, private fiscal archive. */
 import {productFields,clean,integer} from './validators.js';
 import {variantRoute,galleryRoute,publicOptions,adminOptions} from './product-options.js';
+import {can,redactProduct} from './access-control.js';
 const json=(value,status=200,headers={})=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...headers}});
 const fail=(message,status=400)=>json({error:message},status);
 const uid=()=>crypto.randomUUID();
@@ -23,7 +24,7 @@ const invoiceMime=(name,b)=>{
  }
  return '';
 };
-const admin=user=>user?.role==='admin';
+const admin=(user,permission)=>can(user,permission);
 async function audit(env,user,action,target){await env.DB.prepare('INSERT INTO audit_events(id,actor_id,action,target_id) VALUES(?,?,?,?)').bind(uid(),user.id,action,target).run()}
 function listing(d,sku){
  const slug=clean(d.slug||sku.toLowerCase(),80).toLowerCase();
@@ -84,8 +85,9 @@ async function catalogAdmin(req,env,user){
    'FROM products p LEFT JOIN catalog_listings c ON c.product_id=p.id ORDER BY p.updated_at DESC,p.name LIMIT 1500'].join(' ');
   const result=await env.DB.prepare(query).all(),extras=await adminOptions(env);
   const excluded=new Set(extras.variants.map(v=>v.id));
+  const showCost=can(user,'finance.view');
   const items=result.results.filter(p=>!excluded.has(p.id)).map(p=>({
-   ...p,variants:extras.variants.filter(v=>v.parent_product_id===p.id),
+   ...redactProduct(p,showCost),variants:extras.variants.filter(v=>v.parent_product_id===p.id).map(v=>redactProduct(v,showCost)),
    photos:extras.galleries.filter(g=>g.product_id===p.id)
   }));
   return json({items,summary:{total:items.length,published:items.filter(p=>p.published&&p.active).length,
@@ -93,7 +95,7 @@ async function catalogAdmin(req,env,user){
     units:items.reduce((n,p)=>n+(p.variants.length?p.variants.reduce((m,v)=>m+v.quantity,0):p.quantity),0)},site_url:env.SITE_ORIGIN||''});
  }
  if(req.method!=='POST')return fail('Método não permitido.',405);
- if(!admin(user))return fail('Somente administradores podem cadastrar produtos.',403);
+ if(!admin(user,'store.manage'))return fail('Sem permissão para cadastrar produtos.',403);
  const body=await req.json(),p=productFields(body),l=listing(body,p.sku),id=uid();
  const statements=[
   env.DB.prepare('INSERT INTO products(id,sku,name,category,description,cost_cents,retail_cents,wholesale_cents,quantity,min_quantity,supplier_id,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -105,7 +107,7 @@ async function catalogAdmin(req,env,user){
  await env.DB.batch(statements);await audit(env,user,'store_product_create',id);return json({ok:true,id},201);
 }
 async function editProduct(req,env,user,id){
- if(!admin(user))return fail('Somente administradores podem editar produtos.',403);
+ if(!admin(user,'store.manage'))return fail('Sem permissão para editar produtos.',403);
  if(req.method!=='PATCH')return fail('Método não permitido.',405);
  const old=await env.DB.prepare('SELECT * FROM products WHERE id=?').bind(id).first();if(!old)return fail('Produto não encontrado.',404);
  const body=await req.json(),p=productFields({...old,...body,quantity:old.quantity}),l=listing(body,p.sku);
@@ -120,7 +122,7 @@ async function editProduct(req,env,user,id){
  await env.DB.batch(statements);await audit(env,user,'store_product_update',id);return json({ok:true});
 }
 async function stock(req,env,user,id){
- if(!admin(user))return fail('Somente administradores podem ajustar estoque.',403);
+ if(!admin(user,'inventory.adjust'))return fail('Sem permissão para ajustar estoque.',403);
  if(req.method!=='POST')return fail('Método não permitido.',405);
  const body=await req.json(),delta=Number(body.delta),reason=clean(body.reason,80)||'ajuste_manual';
  if(!Number.isSafeInteger(delta)||!integer(Math.abs(delta),1,1000000))return fail('Quantidade inválida.');
@@ -130,7 +132,7 @@ async function stock(req,env,user,id){
  await audit(env,user,'store_stock',id);return json({ok:true});
 }
 async function imageUpload(req,env,user,id){
- if(!admin(user))return fail('Somente administradores podem enviar imagens.',403);
+ if(!admin(user,'store.photos'))return fail('Sem permissão para enviar imagens.',403);
  if(req.method!=='POST')return fail('Método não permitido.',405);
  const data=await req.formData(),file=data.get('file');
  if(!file||typeof file.arrayBuffer!=='function'||file.size<1||file.size>850000)return fail('Imagem JPG, PNG ou WEBP até 850 KB.');
@@ -150,7 +152,7 @@ export async function storeRoute(req,env,user,path){
  if(path==='/api/store/settings'){
   if(req.method==='GET')return publicSite(req,env);
   if(req.method!=='PATCH')return fail('Método não permitido.',405);
-  if(!admin(user))return fail('Somente administradores podem editar a loja.',403);
+  if(!admin(user,'store.manage'))return fail('Sem permissão para editar a loja.',403);
   const body=await req.json(),allowed=['announcement','hero_title','hero_subtitle','whatsapp'],updates=[];
   for(const [key,val] of Object.entries(body)){
    if(!allowed.includes(key))return fail('Campo de configuração inválido.');
@@ -169,7 +171,7 @@ export async function storeRoute(req,env,user,path){
  return editProduct(req,env,user,id);
 }
 export async function invoiceRoute(req,env,user,path){
- if(!admin(user))return fail('Somente administradores podem acessar notas.',403);
+ if(!admin(user,req.method==='GET'?'invoices.view':'invoices.manage'))return fail('Sem permissão para acessar documentos fiscais.',403);
  if(path==='/api/invoices'&&req.method==='GET'){
   const sql='SELECT id,number,supplier_name,issue_date,total_cents,notes,original_filename,mime_type,file_size,sha256,created_at FROM invoice_documents ORDER BY created_at DESC LIMIT 200';
   const records=await env.DB.prepare(sql).all();return json({items:records.results});
