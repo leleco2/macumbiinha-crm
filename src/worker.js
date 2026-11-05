@@ -177,7 +177,7 @@ async function productsRoute(req,env,user,path){
  }
  if(req.method==='POST'&&path==='/api/products'){
   if(!can(user,'products.manage'))return fail('Sem permissão para cadastrar produtos.',403);
-  const d=productFields(await readInput(req)),id=crypto.randomUUID();
+  const input=await readInput(req),d=productFields({...input,cost_cents:can(user,'finance.view')?input.cost_cents:0}),id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO products(id,sku,name,category,description,cost_cents,retail_cents,wholesale_cents,quantity,min_quantity,supplier_id,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,d.sku,d.name,d.category,d.description,d.cost_cents,d.retail_cents,d.wholesale_cents,d.quantity,d.min_quantity,d.supplier_id,d.active).run();
   if(d.quantity)await env.DB.prepare('INSERT INTO inventory_movements(id,product_id,delta,reason) VALUES(?,?,?,?)').bind(crypto.randomUUID(),id,d.quantity,'estoque_inicial').run();
   await activity(env,user.id,'produto','Produto criado: '+d.name);await lowStockAlerts(env);return response({id},201);
@@ -188,7 +188,7 @@ async function productsRoute(req,env,user,path){
  if(path.endsWith('/adjust')&&!can(user,'inventory.adjust'))return fail('Sem permissão para movimentar estoque.',403);
  const old=await env.DB.prepare('SELECT * FROM products WHERE id=?').bind(id).first();if(!old)return fail('Produto não encontrado.',404);
  if(req.method==='PATCH'&&path===`/api/products/${id}`){
-  const input=await readInput(req),d=productFields({...old,...input,quantity:old.quantity});
+  const input=await readInput(req),d=productFields({...old,...input,quantity:old.quantity,cost_cents:can(user,'finance.view')?(input.cost_cents??old.cost_cents):old.cost_cents});
   await env.DB.prepare("UPDATE products SET sku=?,name=?,category=?,description=?,cost_cents=?,retail_cents=?,wholesale_cents=?,min_quantity=?,supplier_id=?,active=?,updated_at=datetime('now') WHERE id=?").bind(d.sku,d.name,d.category,d.description,d.cost_cents,d.retail_cents,d.wholesale_cents,d.min_quantity,d.supplier_id,d.active,id).run();
   await audit(env,user.id,'product_update',id);await lowStockAlerts(env);return response({ok:true});
  }
