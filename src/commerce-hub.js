@@ -1,5 +1,6 @@
 /* Macumbiinha Commerce Hub: catalog owner, inventory controls, private fiscal archive. */
 import {productFields,clean,integer} from './validators.js';
+import {variantRoute,galleryRoute,publicOptions,adminOptions} from './product-options.js';
 const json=(value,status=200,headers={})=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...headers}});
 const fail=(message,status=400)=>json({error:message},status);
 const uid=()=>crypto.randomUUID();
@@ -37,15 +38,29 @@ export async function publicCatalog(req,env){
   'c.slug,c.image_url,c.featured,c.for_wholesale,c.tags_json,c.updated_at,',
   'EXISTS(SELECT 1 FROM product_media m WHERE m.product_id=p.id) AS has_image',
   'FROM products p JOIN catalog_listings c ON c.product_id=p.id',
-  'WHERE c.published=1 AND p.active=1 ORDER BY c.featured DESC,p.name LIMIT 1500'].join(' ');
+  'WHERE c.published=1 AND p.active=1',
+  'AND NOT EXISTS(SELECT 1 FROM product_variants v WHERE v.variant_product_id=p.id)',
+  'ORDER BY c.featured DESC,p.name LIMIT 1500'].join(' ');
  const rows=await env.DB.prepare(query).all();
- return json({source:'macumbiinha-crm',version:'2.0',items:rows.results.map(p=>{
+ const extra=await publicOptions(env,req,rows.results);
+ const items=rows.results.map(p=>{
   let tags=[];try{tags=JSON.parse(p.tags_json||'[]')}catch{}
+  const group=extra.get(p.id)||{variants:[],gallery:[]};
+  const activeVariants=group.variants.filter(v=>v.active===1);
+  const sum=activeVariants.reduce((n,v)=>n+v.quantity,0);
+  const validRetail=activeVariants.map(v=>v.retail_cents).filter(n=>n>0);
+  const validWholesale=activeVariants.map(v=>v.wholesale_cents).filter(n=>n>0);
   return{id:p.id,slug:p.slug,sku:p.sku,name:p.name,category:p.category,description:p.description,
-   image_url:p.has_image?new URL('/api/public/image/'+p.id,req.url).href:p.image_url,
-   tags,featured:!!p.featured,for_wholesale:!!p.for_wholesale,retail_cents:p.retail_cents,
-   wholesale_cents:p.wholesale_cents,available:p.quantity>0,quantity:p.quantity,updated_at:p.updated_at};
- })},200,allowedOrigin(req,env));
+   image_url:group.gallery[0]||activeVariants.find(v=>v.gallery?.length)?.gallery?.[0]||(p.has_image?new URL('/api/public/image/'+p.id,req.url).href:p.image_url),
+   gallery:group.gallery,tags,featured:!!p.featured,for_wholesale:!!p.for_wholesale,
+   retail_cents:group.variants.length?(validRetail.length?Math.min(...validRetail):0):p.retail_cents,
+   wholesale_cents:group.variants.length?(validWholesale.length?Math.min(...validWholesale):0):p.wholesale_cents,
+   available:group.variants.length?sum>0:p.quantity>0,quantity:group.variants.length?sum:p.quantity,
+   variants:activeVariants.map(v=>({id:v.id,sku:v.sku,label:v.label,quantity:v.quantity,available:v.available,
+    retail_cents:v.retail_cents,wholesale_cents:v.wholesale_cents,image_url:v.image_url,gallery:v.gallery})),
+   updated_at:p.updated_at};
+ });
+ return json({source:'macumbiinha-crm',version:'2.1',items},200,allowedOrigin(req,env));
 }
 export async function publicSite(req,env){
  const rows=await env.DB.prepare('SELECT key,value FROM site_settings').all();
@@ -67,8 +82,15 @@ async function catalogAdmin(req,env,user){
    'COALESCE(c.tags_json,\'[]\') tags_json,',
    'EXISTS(SELECT 1 FROM product_media m WHERE m.product_id=p.id) has_image',
    'FROM products p LEFT JOIN catalog_listings c ON c.product_id=p.id ORDER BY p.updated_at DESC,p.name LIMIT 1500'].join(' ');
-  const result=await env.DB.prepare(query).all(),items=result.results;
-  return json({items,summary:{total:items.length,published:items.filter(p=>p.published&&p.active).length,low_stock:items.filter(p=>p.active&&p.quantity<=p.min_quantity).length,units:items.reduce((n,p)=>n+p.quantity,0)},site_url:env.SITE_ORIGIN||''});
+  const result=await env.DB.prepare(query).all(),extras=await adminOptions(env);
+  const excluded=new Set(extras.variants.map(v=>v.id));
+  const items=result.results.filter(p=>!excluded.has(p.id)).map(p=>({
+   ...p,variants:extras.variants.filter(v=>v.parent_product_id===p.id),
+   photos:extras.galleries.filter(g=>g.product_id===p.id)
+  }));
+  return json({items,summary:{total:items.length,published:items.filter(p=>p.published&&p.active).length,
+    low_stock:items.filter(p=>p.active&&(p.variants.length?p.variants.some(v=>v.active&&v.quantity<=v.min_quantity):p.quantity<=p.min_quantity)).length,
+    units:items.reduce((n,p)=>n+(p.variants.length?p.variants.reduce((m,v)=>m+v.quantity,0):p.quantity),0)},site_url:env.SITE_ORIGIN||''});
  }
  if(req.method!=='POST')return fail('Método não permitido.',405);
  if(!admin(user))return fail('Somente administradores podem cadastrar produtos.',403);
@@ -122,6 +144,8 @@ async function imageUpload(req,env,user,id){
  await audit(env,user,'product_photo_upload',id);return json({ok:true,size:bytes.length});
 }
 export async function storeRoute(req,env,user,path){
+ if(/^\/api\/store\/products\/[a-f0-9-]{36}\/variants(?:\/|$)/.test(path))return variantRoute(req,env,user,path);
+ if(/^\/api\/store\/products\/[a-f0-9-]{36}\/gallery(?:\/|$)/.test(path))return galleryRoute(req,env,user,path);
  if(path==='/api/store/catalog')return catalogAdmin(req,env,user);
  if(path==='/api/store/settings'){
   if(req.method==='GET')return publicSite(req,env);

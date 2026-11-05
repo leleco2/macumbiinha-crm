@@ -15,6 +15,34 @@ async function request(path,method='GET',data){
  if(!res.ok)throw new Error(body.error||'Não foi possível concluir.');
  return body;
 }
+/* Camera photos are resized locally: metadata stays on the device, D1 receives <=850 KB WebP. */
+async function optimizePhoto(file){
+ if(file.size<=850000)return file;
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Use imagens JPG, PNG ou WEBP.');
+ if(typeof createImageBitmap!=='function')throw new Error('Esta foto é muito grande. Reduza a imagem para até 850 KB.');
+ const bitmap=await createImageBitmap(file);
+ try{
+  const canvas=document.createElement('canvas'),max=1600;
+  let width=bitmap.width,height=bitmap.height;
+  const ratio=Math.min(1,max/Math.max(width,height));
+  width=Math.max(1,Math.floor(width*ratio));height=Math.max(1,Math.floor(height*ratio));
+  for(let attempt=0;attempt<7;attempt++){
+   canvas.width=width;canvas.height=height;
+   const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Não foi possível processar a imagem.');
+   ctx.drawImage(bitmap,0,0,width,height);
+   const quality=Math.max(.48,.86-attempt*.065);
+   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));
+   if(!blob)throw new Error('Falha ao converter a imagem.');
+   if(blob.size<=850000)return new File([blob],file.name.replace(/\.[^.]+$/,'.webp'),{type:'image/webp'});
+   width=Math.max(250,Math.floor(width*.82));height=Math.max(250,Math.floor(height*.82));
+  }
+  throw new Error('Não foi possível reduzir essa foto. Envie uma imagem menor.');
+ }finally{bitmap.close?.()}
+}
+async function appendPhotos(data,files){
+ if(files.length>8)throw new Error('Envie no máximo 8 fotos de cada vez.');
+ for(const file of files)data.append('files',await optimizePhoto(file));
+}
 function notice(text,type='ok'){
  const node=document.getElementById('toast');if(!node)return;
  node.className=type==='error'?'toast-error show':'toast-ok show';node.textContent=text;
@@ -41,7 +69,7 @@ function openModal(title,content,onSubmit){
  modalCleanup=()=>document.removeEventListener('keydown',escKey);
  layer.querySelector('form').addEventListener('submit',async e=>{
   e.preventDefault();const button=layer.querySelector('.cm-submit');button.disabled=true;
-  try{await onSubmit(new FormData(e.target));closeModal()}catch(err){notice(err.message,'error');button.disabled=false}
+  try{await onSubmit(new FormData(e.target));if(document.getElementById('cm-modal-layer')===layer)closeModal()}catch(err){notice(err.message,'error');button.disabled=false}
  });
  layer.querySelector('input,select,textarea,button')?.focus();
 }
@@ -49,13 +77,13 @@ function closeModal(){modalCleanup?.();modalCleanup=null;document.getElementById
 function productsTable(items,admin){
  if(!items.length)return '<div class="cm-empty">Nenhum produto encontrado. Cadastre um item ou altere os filtros.</div>';
  return '<div class="table-scroll"><table class="cm-table"><thead><tr><th>PRODUTO</th><th>VAREJO</th><th>ATACADO</th><th>ESTOQUE</th><th>SITE</th><th>GESTÃO</th></tr></thead><tbody>'+items.map(p=>{
-  const pub=!!p.published&&!!p.active,stock=Number(p.quantity)||0;
+  const pub=!!p.published&&!!p.active,stock=p.variants?.length?p.variants.reduce((n,v)=>n+Number(v.quantity||0),0):Number(p.quantity)||0;
   return '<tr><td><strong>'+esc(p.name)+'</strong><small>'+esc(p.sku)+' · '+esc(CATEGORIES.find(x=>x[0]===p.category)?.[1]||p.category)+'</small></td>'+
    '<td>'+ (p.retail_cents?fmt(p.retail_cents):'A definir')+'</td><td>'+(p.wholesale_cents?fmt(p.wholesale_cents):'A definir')+'</td>'+
    '<td>'+tag(stock+' un.',stock<=p.min_quantity?'warning':'ok')+'</td>'+
    '<td>'+tag(pub?'Publicado':'Rascunho',pub?'ok':'')+'</td>'+
-   '<td><div class="cm-row-actions"><button data-cm="edit" data-id="'+esc(p.id)+'">Editar</button>'+
-   (admin?'<button data-cm="stock" data-id="'+esc(p.id)+'">Estoque</button><button data-cm="toggle" data-id="'+esc(p.id)+'">'+(pub?'Ocultar':'Publicar')+'</button>':'')+
+   '<td><div class="cm-row-actions"><button data-cm="edit" data-id="'+esc(p.id)+'">Editar</button>'+ (admin?'<button data-cm="variants" data-id="'+esc(p.id)+'">Variações ('+(p.variants?.length||0)+')</button><button data-cm="gallery" data-id="'+esc(p.id)+'">Fotos ('+(p.photos?.length||0)+')</button>':'') +
+   (admin?''+(!p.variants?.length?'<button data-cm="stock" data-id="'+esc(p.id)+'">Estoque</button>':'')+'<button data-cm="toggle" data-id="'+esc(p.id)+'">'+(pub?'Ocultar':'Publicar')+'</button>':'')+
    '</div></td></tr>';
  }).join('')+'</tbody></table></div>';
 }
@@ -90,16 +118,13 @@ function productEditor(p,done){
  '</div><label class="cm-field"><span>Descrição</span><textarea name="description" rows="3" maxlength="3000">'+esc(p?.description||'')+'</textarea></label>'+
  '<div class="cm-check-grid">'+checkField('Produto ativo', 'active',p?!!p.active:true)+checkField('Publicado na loja','published',!!p?.published)+
  checkField('Destaque da vitrine','featured',!!p?.featured)+checkField('Indicado para atacado','for_wholesale',!!p?.for_wholesale)+'</div>'+
- '<div class="cm-file-row"><label class="cm-field"><span>Foto do produto (JPG, PNG, WEBP · até 850 KB)</span><input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp,image/png,image/jpeg,image/webp"></label></div>'+
+ '<div class="cm-file-row"><label class="cm-field"><span>Imagens do produto (até 8, JPG, PNG ou WEBP · 850 KB cada)</span><input type="file" name="photos" multiple accept=".jpg,.jpeg,.png,.webp,image/png,image/jpeg,image/webp"></label></div>'+ 
  '<p class="cm-hint">Estoque só muda em uma movimentação própria. Não informe preços inventados: zero aparece como “sob consulta” no site.</p>';
  openModal(p?'Editar produto':'Cadastrar produto',inner,async fd=>{
   const payload=productPayload(fd,p);
   const result=await request(p?'store/products/'+p.id:'store/catalog',p?'PATCH':'POST',payload);
-  const id=p?.id||result.id;const photo=fd.get('photo');
-  if(photo&&photo.size){
-   const imageData=new FormData();imageData.set('file',photo);
-   await request('store/products/'+id+'/image','POST',imageData);
-  }
+  const id=p?.id||result.id;const files=fd.getAll('photos').filter(x=>x?.size);
+  if(files.length){const imageData=new FormData();await appendPhotos(imageData,files);await request('store/products/'+id+'/gallery','POST',imageData);}
   notice('Produto salvo e catálogo atualizado.');await done();
  });
 }
@@ -138,7 +163,7 @@ export async function renderCommerceScreen({root,admin}){
  '<section class="panel cm-panel"><div class="cm-toolbar"><label class="cm-search"><span>Buscar produtos</span><input id="cm-search" type="search" placeholder="Nome, SKU ou categoria"></label>'+
  '<label class="cm-filter"><span>Publicação</span><select id="cm-filter"><option value="all">Todos</option><option value="published">Publicados</option><option value="draft">Rascunhos</option><option value="low">Estoque baixo</option></select></label>'+
  '<button class="btn ghost" data-cm="reload">Atualizar</button></div><div id="cm-table">'+productsTable(products,admin)+'</div></section>'+
- '<p class="cm-hint cm-footer-note">O catálogo anterior da loja foi importado com preços e quantidades zerados até sua conferência. Custos e fornecedores nunca são exibidos no site.</p>';
+ '<p class="cm-hint cm-footer-note">Variações têm SKU, estoque e preço próprios, mas aparecem agrupadas em um único produto na loja. Custos e fornecedores nunca são exibidos no site.</p>';
  const refresh=()=>renderCommerceScreen({root,admin});
  const paint=()=>{
   const q=String(root.querySelector('#cm-search')?.value||'').toLowerCase().trim(),mode=root.querySelector('#cm-filter')?.value;
@@ -156,6 +181,8 @@ export async function renderCommerceScreen({root,admin}){
    if(action==='new')return productEditor(null,refresh);
    if(action==='settings'){const data=await request('store/settings');return settingEditor(data.settings,refresh)}
    if(action==='edit'&&p)return productEditor(p,refresh);
+   if(action==='variants'&&p)return variantManager(p,refresh);
+   if(action==='gallery'&&p)return galleryManager(p,refresh);
    if(action==='stock'&&p)return stockEditor(p,refresh);
    if(action==='toggle'&&p){
     const tags=(()=>{try{return JSON.parse(p.tags_json||'[]')}catch{return []}})();
@@ -194,5 +221,101 @@ export async function renderInvoiceScreen({root,admin}){
     await request('invoices','POST',fd);notice('Documento arquivado com sucesso.');await renderInvoiceScreen({root,admin});
    });
   }
+ };
+}
+
+
+/** Gallery manager is available even for draft products; previews use authenticated routes. */
+async function galleryManager(p,done){
+ const path='store/products/'+p.id+'/gallery';
+ const {items}=await request(path);
+ const list=items.length?'<div class="cm-gallery-grid">'+items.map((file,index)=>{
+  const preview='/api/store/products/'+encodeURIComponent(p.id)+'/gallery/'+encodeURIComponent(file.id)+'/view';
+  return '<article class="cm-gallery-tile"><img src="'+preview+'" alt="'+esc(file.file_name)+'" loading="lazy"><div><small>'+esc(file.file_name)+'</small>'+
+  '<button type="button" data-gallery-action="cover" data-image="'+esc(file.id)+'" '+(index===0?'disabled':'')+'>'+(index===0?'Foto principal':'Definir capa')+'</button>'+
+  '<button type="button" data-gallery-action="remove" data-image="'+esc(file.id)+'">Excluir</button></div></article>';
+ }).join('')+'</div>':'<p class="cm-hint">Este produto ainda não tem fotos enviadas. Selecione as imagens abaixo para criar uma galeria.</p>';
+ const form=list+'<div class="cm-file-row"><label class="cm-field"><span>Adicionar fotos (até 8 por produto, 850 KB cada)</span><input type="file" name="files" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" multiple required></label></div>'+
+ '<p class="cm-hint">As fotos só aparecem publicamente quando o produto principal estiver publicado. A primeira da lista é usada como capa.</p>';
+ openModal('Fotos · '+p.name,form,async fd=>{
+  const files=fd.getAll('files').filter(file=>file?.size);
+  if(!files.length)throw new Error('Selecione uma ou mais imagens.');
+  const data=new FormData();await appendPhotos(data,files);
+  await request(path,'POST',data);
+  notice('Imagens enviadas com sucesso.');await done();
+ });
+ const layer=document.getElementById('cm-modal-layer');
+ const submit=layer?.querySelector('.cm-submit');if(submit)submit.textContent='Enviar fotos';
+ const rows=layer?.querySelector('.cm-form-body');if(!rows)return;
+ rows.onclick=async event=>{
+  const target=event.target.closest('[data-gallery-action]');if(!target)return;
+  const action=target.dataset.galleryAction,photo=target.dataset.image;
+  if(action==='remove'&&!confirm('Excluir essa foto da galeria?'))return;
+  target.disabled=true;
+  try{
+   await request(path+'/'+photo+(action==='cover'?'/cover':''),action==='cover'?'POST':'DELETE');
+   notice(action==='cover'?'Foto principal atualizada.':'Foto removida.');
+   await done();
+   await galleryManager(p,done);
+  }catch(e){notice(e.message,'error');target.disabled=false}
+ };
+}
+function variantInput(fd,p,current){
+ const value=k=>String(fd.get(k)||'').trim();
+ const sku=value('sku').toUpperCase(),label=value('label');
+ const cents=key=>toCents(value(key));
+ const retail=cents('retail_real'),wholesale=cents('wholesale_real'),cost=cents('cost_real');
+ if(!sku||!label||[retail,wholesale,cost].some(n=>!Number.isFinite(n)))throw new Error('Preencha o SKU, a descrição e os preços corretamente.');
+ return {label,sku,quantity:current?Number(current.quantity):Number(value('quantity')),
+  min_quantity:Number(value('min_quantity')),retail_cents:retail,wholesale_cents:wholesale,cost_cents:cost,
+  active:fd.has('active')?1:0,position:Number(value('position')||0)};
+}
+function variantEditor(parent,v,done){
+ const inner='<p class="cm-context">Produto principal: <strong>'+esc(parent.name)+'</strong>. A variação terá SKU próprio e aparecerá dentro da mesma página no site.</p>'+
+ '<div class="cm-form-grid">'+formField('Nome da variação *','label',v?.label||'','text','required maxlength="100" placeholder="Ex.: King Size / Black"')+
+ formField('SKU exclusivo *','sku',v?.sku||parent.sku+'-','text','required minlength="2" maxlength="70"')+
+ formField('Preço varejo (R$)','retail_real',num(v?.retail_cents??parent.retail_cents),'text','inputmode="decimal"')+
+ formField('Preço atacado (R$)','wholesale_real',num(v?.wholesale_cents??parent.wholesale_cents),'text','inputmode="decimal"')+
+ formField('Custo unitário (R$)','cost_real',num(v?.cost_cents??parent.cost_cents),'text','inputmode="decimal"')+
+ (!v?formField('Estoque inicial','quantity','0','number','required min="0" max="1000000"'):'')+
+ formField('Estoque mínimo','min_quantity',v?.min_quantity??parent.min_quantity,'number','required min="0" max="1000000"')+
+ formField('Ordem de exibição','position',v?.position||0,'number','min="0" max="1000"')+
+ '</div>'+checkField('Variação ativa','active',v?!!v.active:true)+
+ '<div class="cm-file-row"><label class="cm-field"><span>Fotos desta variação (opcional, até 8)</span><input type="file" name="variantPhotos" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"></label></div>'+
+ '<p class="cm-hint">Quantidade não pode ser alterada ao editar: use a movimentação de estoque, que registra o histórico. Quando um pedido usa o SKU desta opção, a baixa é feita nesta variação.</p>';
+ openModal(v?'Editar variação':'Nova variação',inner,async fd=>{
+  const data=variantInput(fd,parent,v);
+  const base='store/products/'+parent.id+'/variants';
+  const result=await request(v?base+'/'+v.id:base,v?'PATCH':'POST',data);
+  const target=v?.id||result.id;
+  const photos=fd.getAll('variantPhotos').filter(x=>x?.size);
+  if(photos.length){const form=new FormData();await appendPhotos(form,photos);await request('store/products/'+target+'/gallery','POST',form);}
+  notice(v?'Variação atualizada.':'Variação criada com sucesso.');
+  await done();
+ });
+}
+async function variantManager(parent,done){
+ const result=await request('store/products/'+parent.id+'/variants');
+ const list=result.items;
+ const inner='<p class="cm-context">Todas estas opções pertencem ao mesmo produto na vitrine, mas têm preço, código e estoque independentes.</p>'+
+ '<div class="cm-variant-list">'+(list.length?list.map(v=>
+  '<article class="cm-variant-row"><div><strong>'+esc(v.label)+'</strong><small>'+esc(v.sku)+' · '+v.quantity+' un. · '+fmt(v.retail_cents)+' varejo</small></div><div class="cm-row-actions">'+
+  '<button type="button" data-var-action="edit" data-id="'+esc(v.id)+'">Editar</button>'+
+  '<button type="button" data-var-action="stock" data-id="'+esc(v.id)+'">Estoque</button>'+
+  '<button type="button" data-var-action="photos" data-id="'+esc(v.id)+'">Fotos</button></div></article>'
+ ).join(''):'<p class="cm-hint">Este produto ainda não tem variações cadastradas.</p>')+'</div>'+
+ '<button type="button" class="btn primary cm-add-variant" data-var-action="new">+ Adicionar variação</button>';
+ openModal('Variações · '+parent.name,inner,async()=>{});
+ const layer=document.getElementById('cm-modal-layer');if(!layer)return;
+ layer.querySelector('.cm-submit')?.remove();
+ layer.querySelector('.cm-form-body').onclick=async e=>{
+  const target=e.target.closest('[data-var-action]');if(!target)return;
+  const action=target.dataset.varAction,v=list.find(x=>x.id===target.dataset.id);
+  try{
+   if(action==='new')return variantEditor(parent,null,async()=>{await done();await variantManager(parent,done)});
+   if(action==='edit'&&v)return variantEditor(parent,v,async()=>{await done();await variantManager(parent,done)});
+   if(action==='stock'&&v)return stockEditor(v,async()=>{await done();await variantManager(parent,done)});
+   if(action==='photos'&&v)return galleryManager(v,async()=>{await done()});
+  }catch(err){notice(err.message,'error')}
  };
 }

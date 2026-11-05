@@ -1,6 +1,7 @@
 import {STAGES,SEGMENTS,CONTACT_STATUSES,ORIGINS,ORDER_STATUSES,PAYMENTS,FINANCE_STATUSES,FINANCE_TYPES,integer,clean,choice,emailOk,phoneOk,contactFields,productFields,dealFields,taskFields,financeFields,orderStatusAllowed} from './validators.js';
 import {dispatchPush,validateSubscription} from './push.js';
 import {publicCatalog,publicSite,publicImage,storeRoute,invoiceRoute} from './commerce-hub.js';
+import {publicGalleryPhoto} from './product-options.js';
 
 const encoder=new TextEncoder(),SESSION_SECONDS=8*60*60;
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};
@@ -431,6 +432,7 @@ async function api(req,env){
  if(path==='/api/public/catalog'&&method==='GET')return publicCatalog(req,env);
  if(path==='/api/public/site'&&method==='GET')return publicSite(req,env);
  if(path.startsWith('/api/public/image/'))return publicImage(req,env,path);
+ if(path.startsWith('/api/public/gallery/'))return publicGalleryPhoto(req,env,path);
  if(path==='/api/setup/status'&&method==='GET'){const users=await env.DB.prepare('SELECT COUNT(*) AS total FROM users').first();return response({needs_setup:users.total===0})}
  if(path==='/api/setup'&&method==='POST')return setup(req,env);
  if(path==='/api/auth/login'&&method==='POST')return login(req,env);
