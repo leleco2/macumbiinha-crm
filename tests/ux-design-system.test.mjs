@@ -53,5 +53,21 @@ test('PWA: branded app metadata and revised cache keys',()=>{
   assert.ok(sw.includes(asset),asset);
  }
  assert.match(sw,/startsWith\('\/api\/\'/);
- assert.match(sw,/crm-shell-v5/);
+ assert.match(sw,/crm-shell-v6/);
+ for(const asset of ['access-prompt.js','access-prompt.css'])assert.ok(sw.includes(asset),asset);
+ assert.match(file('index.html'),/\/access-prompt\.css/);
+});
+
+test('PWA access popup is optional, with explicit notification opt-in',()=>{
+ const script=file('access-prompt.js'),style=file('access-prompt.css'),app=file('app.js');
+ assert.match(script,/data-access="close"/);
+ assert.match(script,/data-access="notifications"/);
+ assert.match(script,/data-access="install"/);
+ assert.match(script,/!authenticated/);
+ assert.match(script,/Notification.permission/);
+ assert.match(script,/30\*24\*60\*60\*1000/);
+ assert.match(style,/max-height/);
+ assert.match(style,/prefers-reduced-motion/);
+ assert.match(app,/setupAccessPrompt\(promptInstall,enableMobileNotifications\)/);
+ assert.doesNotMatch(app,/await api\('push\/test','POST',\{\}\)/);
 });

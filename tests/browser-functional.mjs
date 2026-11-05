@@ -59,7 +59,14 @@ try{
   page.on('console',msg=>{if(msg.type()==='error'&&!msg.text().includes('fonts.googleapis.com'))errors.push('Console: '+msg.text())});
   await page.goto(addr,{waitUntil:'domcontentloaded'});
   await page.locator('.page-heading').waitFor({timeout:12000});
-  assert.equal(await page.locator('.nav-item').count(),12,'Navigation should load');
+  await page.locator('#crm-access-prompt').waitFor({timeout:6500});
+  assert.equal(await page.locator('#crm-access-prompt [data-access="close"]').count(),2,'Pop-up can be dismissed with X or Agora não');
+  assert.equal(await page.locator('#crm-access-prompt [data-access="install"]').count(),1,'Install action available');
+  assert.equal(await page.locator('#crm-access-prompt [data-access="notifications"]').count(),1,'Notification action available');
+  assert.equal(requests.some(x=>x.key==='push/subscribe'),false,'No unsolicited notifications');
+  await page.locator('#crm-access-prompt .crm-access-close').click();
+  await page.locator('#crm-access-prompt').waitFor({state:'hidden'});
+    assert.equal(await page.locator('.nav-item').count(),12,'Navigation should load');
   assert.match(await page.locator('#workspace').innerText(),/Visão geral/);
   const sections=['orders','products','store','invoices','contacts','deals','finance','tasks','suppliers','activity','settings'];
   const names={orders:'Pedidos',products:'Produtos e estoque',store:'Gestão da loja',invoices:'Notas e documentos',contacts:'Clientes e leads',deals:'Funil de vendas',finance:'Financeiro',tasks:'Tarefas',suppliers:'Fornecedores',activity:'Histórico',settings:'Configurações'};
@@ -155,10 +162,22 @@ try{
  const loginPage=await loginContext.newPage();
  await loginPage.goto(addr,{waitUntil:'domcontentloaded'});
  await loginPage.locator('#login-form').waitFor({timeout:12000});
+ await loginPage.locator('#crm-access-prompt').waitFor({timeout:6500});
+ assert.equal(await loginPage.locator('#crm-access-prompt [data-access="install"]').count(),1);
+ assert.equal(await loginPage.locator('#crm-access-prompt [data-access="notifications"]').count(),1);
+ await loginPage.locator('#crm-access-prompt [data-access="notifications"]').click({force:true});
+ assert.equal(requests.some(x=>x.key==='push/subscribe'),false,'Push subscription must wait until login and user consent');
  await loginPage.locator('#login-form [name=email]').fill('teste@example.org');
  await loginPage.locator('#login-form [name=password]').fill('senha-de-teste');
  await loginPage.locator('#login-form button[type=submit]').click();
  await loginPage.locator('.page-heading').waitFor({timeout:12000});
+ await loginPage.locator('#crm-access-prompt').waitFor({timeout:4500});
+ await loginPage.locator('#crm-access-prompt [data-access="close"]').first().click();
+ await loginPage.locator('#crm-access-prompt').waitFor({state:'hidden'});
+ await loginPage.reload({waitUntil:'domcontentloaded'});
+ await loginPage.locator('#login-form').waitFor();
+ await loginPage.waitForTimeout(800);
+ assert.equal(await loginPage.locator('#crm-access-prompt').count(),0,'Dismissed prompt must stay closed');
  console.log('login submitted and returned to dashboard');
  await loginContext.close();
 }catch(e){console.error(e);process.exitCode=1}

@@ -1,5 +1,6 @@
 import {financialChart,expenseDonutChart} from './finance-analytics.js';
 import {setupExperience,refreshExperience,promptInstall,getTheme} from './experience.js';
+import {setupAccessPrompt,showAccessPrompt} from './access-prompt.js';
 import {renderCommerceScreen,renderInvoiceScreen} from './commerce-console.js';
 const queryRoot=(root)=>typeof root==='string'?document.querySelector(root):root;
 const $=(selector,root=document)=>queryRoot(root)?.querySelector(selector)||null;
@@ -31,7 +32,7 @@ const icon=name=>`<span aria-hidden="true" class="glyph">${pict(name)}</span>`;
 const phoneLink=phone=>phone?`<a class="simple-link" target="_blank" rel="noopener noreferrer" href="https://wa.me/${String(phone).replace(/\D/g,'')}">${esc(phone)}</a>`:'—';
 function renderSetup(){
  app.innerHTML=`<main class="login-screen"><div class="login-design"><div class="login-brand"><span class="login-brand-icon"><img src="/icon.svg" alt=""></span>macumbiinha</div><div class="login-editorial"><span class="eyebrow">PRIMEIRO ACESSO</span><h1>Sua operação,<br>bem estruturada.<br><em>desde o início.</em></h1><p>Crie o primeiro administrador com uma senha forte. O código de instalação fica salvo apenas na configuração do servidor.</p></div><div class="login-footer">CONFIGURAÇÃO SEGURA / 01 DE 01</div></div><section class="login-panel"><div class="login-card"><div class="login-icon"><img src="/icon.svg" alt=""></div><span class="eyebrow">ATIVAÇÃO DO SISTEMA</span><h2>Configure sua conta.</h2><p>Cadastre o primeiro administrador do CRM.</p><form id="setup-form" class="auth-form"><label>Seu e-mail<input type="email" name="email" autocomplete="username" required placeholder="seu@email.com"></label><label>Senha forte (mín. 14 caracteres)<input type="password" name="password" autocomplete="new-password" minlength="14" required></label><label>Chave de instalação (SETUP_KEY)<input type="password" name="setup_key" autocomplete="off" required placeholder="Chave configurada no Cloudflare"></label><button class="btn primary wide" type="submit">Criar administrador</button></form><div class="login-tip">Para ativar, configure o segredo <strong>SETUP_KEY</strong> no Worker da Cloudflare. Não existe usuário ou senha padrão.</div></div></section></main>`;
- refreshExperience(false);
+ refreshExperience(false);showAccessPrompt(false);
  $('#setup-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('[type=submit]',e.target);btn.disabled=true;
   try{const d=Object.fromEntries(new FormData(e.target));const res=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json','x-setup-key':d.setup_key},body:JSON.stringify({email:d.email,password:d.password})});const result=await res.json();if(!res.ok)throw new Error(result.error||'Falha na configuração');toast('Administrador criado. Agora faça login.');renderLogin()}
   catch(err){toast(err.message,'error');btn.disabled=false}
@@ -40,7 +41,7 @@ function renderSetup(){
 function renderLogin(){
  clearInterval(state.poll);state.poll=null;
  app.innerHTML=`<main class="login-screen"><div class="login-design"><div class="login-brand"><span class="login-brand-icon"><img src="/icon.svg" alt=""></span>macumbiinha</div><div class="login-editorial"><span class="eyebrow">CRM / OPERAÇÃO / GESTÃO</span><h1>Dados claros.<br>Decisões melhores.<br><em>Todos os dias.</em></h1><p>Vendas, clientes, estoque e financeiro organizados para acompanhar o crescimento da Macumbiinha.</p></div><div class="login-footer">Um espaço de trabalho só seu. · ${new Date().getFullYear()}</div></div><section class="login-panel"><div class="login-card"><div class="login-icon"><img src="/icon.svg" alt=""></div><span class="eyebrow">ACESSO RESTRITO</span><h2>Acesse sua conta.</h2><p>Entre com as credenciais do seu CRM.</p><form id="login-form" class="auth-form"><label>E-mail<input name="email" type="email" required autocomplete="username" placeholder="seu@email.com"></label><label>Senha<input name="password" type="password" required autocomplete="current-password" placeholder="Sua senha"></label><button type="submit" class="btn primary wide">Entrar no painel</button></form><div class="login-tip">Primeiro acesso? Configure a conta de administrador seguindo o <strong>README.md</strong>. Nenhuma senha padrão foi criada.</div></div></section></main>`;
- refreshExperience(false);
+ refreshExperience(false);showAccessPrompt(false);
  $('#login-form').addEventListener('submit',async e=>{e.preventDefault();const button=$('button[type=submit]',e.target);button.disabled=true;button.textContent='Verificando acesso…';try{const fd=new FormData(e.target);const d=await api('auth/login','POST',{email:fd.get('email'),password:fd.get('password')});state.user=d.user;toast('Acesso autorizado.');renderShell()}catch(err){toast(err.message,'error');button.disabled=false;button.textContent='Entrar no painel'}});
 }
 function renderShell(){
@@ -54,7 +55,7 @@ function renderShell(){
  $('#sound-toggle').onclick=activateSound;$('#alerts-btn').onclick=toggleAlerts;
  $('#install-btn').onclick=()=>promptInstall();
  /* Menu navigation is handled once by document delegation to avoid duplicate requests. */
- refreshExperience(true);renderSection().catch(e=>toast(e.message,'error'));pollAlerts();
+ refreshExperience(true);showAccessPrompt(true);renderSection().catch(e=>toast(e.message,'error'));pollAlerts();
  clearInterval(state.poll);state.poll=setInterval(()=>{if(document.visibilityState==='visible'&&state.user)pollAlerts(true).catch(()=>{})},25000);
 }
 async function go(section){state.section=section;$('#sidebar')?.classList.remove('mobile-open');if($('#alerts-drawer'))$('#alerts-drawer').hidden=true;$$('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.nav===section));const nav=NAV.find(v=>v[0]===section);if($('#breadcrumb'))$('#breadcrumb').textContent=nav?.[1]||'Painel';$('#menu-toggle')?.setAttribute('aria-expanded','false');$$('.nav-item').forEach(el=>{el.toggleAttribute('aria-current',el.dataset.nav===section);if(el.dataset.nav===section)el.setAttribute('aria-current','page')});await renderSection();window.scrollTo({top:0,behavior:'smooth'})}
@@ -205,18 +206,19 @@ async function executeAction(action,id,value){switch(action){
  }}
 document.addEventListener('click',e=>{const nav=e.target.closest('[data-nav]');if(nav){go(nav.dataset.nav);return}const el=e.target.closest('[data-action]');if(!el)return;executeAction(el.dataset.action,el.dataset.id,el.dataset.value).catch(err=>toast(err.message,'error'))});
 async function boot(){try{const x=await api('auth/me');state.user=x.user;renderShell()}catch{try{const setup=await api('setup/status');if(setup.needs_setup)renderSetup();else renderLogin()}catch{renderLogin()}}if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{})}}
+setupAccessPrompt(promptInstall,enableMobileNotifications);
 setupExperience(toast);
 boot();
 
 /* Native notifications are optional: the PWA continues to work without push. */
 function urlB64ToUint8Array(base64){const str=atob(base64.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-base64.length%4)%4));return Uint8Array.from(str,c=>c.charCodeAt(0))}
 async function enableMobileNotifications(){
- if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))return toast('Este navegador não oferece notificações push.','error');
- const keys=await api('push/public-key');if(!keys.configured)return toast('Configure VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY e VAPID_SUBJECT no Worker.','error');
- const permission=await Notification.requestPermission();if(permission!=='granted')return toast('Permissão de notificações não concedida.','error');
+ if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){toast('Este navegador não oferece notificações push.','error');return false}
+ const keys=await api('push/public-key');if(!keys.configured){toast('Notificações indisponíveis: faltam as chaves VAPID no servidor.','error');return false}
+ const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();if(permission!=='granted'){toast('Permissão de notificações não concedida.','error');return false}
  const registration=await navigator.serviceWorker.ready;
- const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64ToUint8Array(keys.public_key)});
- await api('push/subscribe','POST',subscription.toJSON());await api('push/test','POST',{});toast('Notificações do celular habilitadas.');
+ const subscription=await registration.pushManager.getSubscription()||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64ToUint8Array(keys.public_key)});
+ await api('push/subscribe','POST',subscription.toJSON());toast('Notificações do CRM habilitadas.');return true;
 }
 const originalAction=executeAction;
 executeAction=async function(action,id,value){if(action==='enable-push')return enableMobileNotifications();return originalAction(action,id,value)};
