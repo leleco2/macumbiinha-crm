@@ -15,6 +15,34 @@ async function request(path,method='GET',data){
  if(!res.ok)throw new Error(body.error||'Não foi possível concluir.');
  return body;
 }
+/* Camera photos are resized locally: metadata stays on the device, D1 receives <=850 KB WebP. */
+async function optimizePhoto(file){
+ if(file.size<=850000)return file;
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Use imagens JPG, PNG ou WEBP.');
+ if(typeof createImageBitmap!=='function')throw new Error('Esta foto é muito grande. Reduza a imagem para até 850 KB.');
+ const bitmap=await createImageBitmap(file);
+ try{
+  const canvas=document.createElement('canvas'),max=1600;
+  let width=bitmap.width,height=bitmap.height;
+  const ratio=Math.min(1,max/Math.max(width,height));
+  width=Math.max(1,Math.floor(width*ratio));height=Math.max(1,Math.floor(height*ratio));
+  for(let attempt=0;attempt<7;attempt++){
+   canvas.width=width;canvas.height=height;
+   const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Não foi possível processar a imagem.');
+   ctx.drawImage(bitmap,0,0,width,height);
+   const quality=Math.max(.48,.86-attempt*.065);
+   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));
+   if(!blob)throw new Error('Falha ao converter a imagem.');
+   if(blob.size<=850000)return new File([blob],file.name.replace(/\.[^.]+$/,'.webp'),{type:'image/webp'});
+   width=Math.max(250,Math.floor(width*.82));height=Math.max(250,Math.floor(height*.82));
+  }
+  throw new Error('Não foi possível reduzir essa foto. Envie uma imagem menor.');
+ }finally{bitmap.close?.()}
+}
+async function appendPhotos(data,files){
+ if(files.length>8)throw new Error('Envie no máximo 8 fotos de cada vez.');
+ for(const file of files)data.append('files',await optimizePhoto(file));
+}
 function notice(text,type='ok'){
  const node=document.getElementById('toast');if(!node)return;
  node.className=type==='error'?'toast-error show':'toast-ok show';node.textContent=text;
@@ -96,7 +124,7 @@ function productEditor(p,done){
   const payload=productPayload(fd,p);
   const result=await request(p?'store/products/'+p.id:'store/catalog',p?'PATCH':'POST',payload);
   const id=p?.id||result.id;const files=fd.getAll('photos').filter(x=>x?.size);
-  if(files.length){const imageData=new FormData();for(const file of files)imageData.append('files',file);await request('store/products/'+id+'/gallery','POST',imageData);}
+  if(files.length){const imageData=new FormData();await appendPhotos(imageData,files);await request('store/products/'+id+'/gallery','POST',imageData);}
   notice('Produto salvo e catálogo atualizado.');await done();
  });
 }
@@ -212,7 +240,7 @@ async function galleryManager(p,done){
  openModal('Fotos · '+p.name,form,async fd=>{
   const files=fd.getAll('files').filter(file=>file?.size);
   if(!files.length)throw new Error('Selecione uma ou mais imagens.');
-  const data=new FormData();for(const file of files)data.append('files',file);
+  const data=new FormData();await appendPhotos(data,files);
   await request(path,'POST',data);
   notice('Imagens enviadas com sucesso.');await done();
  });
@@ -261,7 +289,7 @@ function variantEditor(parent,v,done){
   const result=await request(v?base+'/'+v.id:base,v?'PATCH':'POST',data);
   const target=v?.id||result.id;
   const photos=fd.getAll('variantPhotos').filter(x=>x?.size);
-  if(photos.length){const form=new FormData();for(const file of photos)form.append('files',file);await request('store/products/'+target+'/gallery','POST',form);}
+  if(photos.length){const form=new FormData();await appendPhotos(form,photos);await request('store/products/'+target+'/gallery','POST',form);}
   notice(v?'Variação atualizada.':'Variação criada com sucesso.');
   await done();
  });
