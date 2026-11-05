@@ -90,7 +90,7 @@ export async function variantRoute(req,env,user,path){
  return error('Método não permitido.',405);
 }
 export async function galleryRoute(req,env,user,path){
- const match=path.match(/^\/api\/store\/products\/([a-f0-9-]{36})\/gallery(?:\/([a-f0-9-]{36})(?:\/cover)?)?$/);
+ const match=path.match(/^\/api\/store\/products\/([a-f0-9-]{36})\/gallery(?:\/([a-f0-9-]{36})(?:\/(cover|view))?)?$/);
  if(!match)return error('Galeria não encontrada.',404);
  const productId=match[1],imageId=match[2];
  const product=await env.DB.prepare('SELECT id FROM products WHERE id=?').bind(productId).first();
@@ -100,6 +100,11 @@ export async function galleryRoute(req,env,user,path){
   return out({items:records.results});
  }
  if(!isAdmin(user))return error('Somente administradores podem enviar fotos.',403);
+ if(imageId&&req.method==='GET'&&match[3]==='view'){
+  const row=await env.DB.prepare('SELECT mime_type,body FROM product_gallery WHERE id=? AND product_id=?').bind(imageId,productId).first();
+  if(!row)return error('Imagem não encontrada.',404);
+  return new Response(row.body,{headers:{'Content-Type':row.mime_type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+ }
  if(req.method==='POST'&&!imageId){
   const form=await req.formData(),files=form.getAll('files').filter(file=>file&&typeof file.arrayBuffer==='function'&&file.size);
   if(!files.length||files.length>8)return error('Selecione de 1 a 8 imagens por envio.');
