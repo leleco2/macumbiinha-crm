@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const payload={
  'auth/me':{user:{id:'u',email:'teste@example.org',role:'admin'}},
+ 'auth/login':{user:{id:'u',email:'teste@example.org',role:'admin'}},
  'dashboard':{contacts:{total:2,atacado:1,clientes:1},orders:{total:1,novos:0,confirmados:1,vendas_confirmadas:124900},products:{total:2,low:1,units:30},finance:{received:0,spent:0,receivable:124900,payable:0},deals:[],tasks:{pending:1,overdue:0},recent:[],alerts:{unread:0}},
  'orders':{items:[{id:'o1',order_number:'MC-TESTE-01',contact_id:'c1',contact_name:'Cliente Teste',status:'novo',segment:'varejo',payment_status:'pendente',total_cents:8990,created_at:'2026-11-05'}]},
  'contacts':{items:[{id:'c1',name:'Cliente Teste',phone:'21999999999',email:'cliente@example.org',segment:'varejo',status:'cliente',origin:'manual',notes:'',created_at:'2026-11-05'}]},
