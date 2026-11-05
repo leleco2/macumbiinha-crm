@@ -161,3 +161,24 @@ Em **Loja online → Variações**, um produto principal (por exemplo, uma seda)
 Em **Loja online → Fotos**, faça upload de até 8 imagens JPG, PNG ou WEBP por produto/variação, reorganizando a capa e removendo fotos individuais. O formulário de produto também aceita várias fotos. Fotos grandes são redimensionadas no navegador para WebP de no máximo 850 KB cada. Imagens de produtos não publicados só podem ser pré-visualizadas por usuários autenticados do CRM. A API pública só serve as fotos quando o produto principal está publicado e ativo.
 
 A migração aditiva é `migrations/0006_variants_gallery.sql` e mantém as notas, pedidos, contatos e imagens anteriores. Não se trata de geração automática de produtos novos a partir de fotos; nome, preço e estoque devem ser cadastrados no CRM.
+
+
+## Equipe, cargos e permissões (RBAC)
+
+Acesse **Usuários e permissões** no menu lateral usando uma conta administradora. Cada colaborador utiliza seu próprio e-mail e senha (mínimo de 14 caracteres). O administrador escolhe o cargo, pode personalizar cada permissão, redefinir senha e bloquear/reativar o acesso sem excluir o histórico.
+
+| Cargo | Finalidade | Limitação principal |
+| --- | --- | --- |
+| Administrador | Todas as áreas e usuários | A conta administradora não pode ser a última a perder o acesso |
+| Gerente | Operação, loja e acompanhamento financeiro | Não administra os usuários |
+| Financeiro | Receitas, despesas, pagamentos, NF-e arquivadas, relatórios | Não altera estoque, produtos ou usuários |
+| Estoque | Entradas/saídas, consulta de produtos, fotos e acompanhamento dos pedidos | Não vê custos internos, documentos financeiros ou pagamentos |
+| Vendas | Pedidos, clientes, negociações e tarefas | Não registra pagamentos nem acessa o financeiro |
+| Atendimento | Clientes, solicitações, pedidos novos e tarefas | Não confirma vendas nem acessa financeiro |
+| Somente leitura | Consultas operacionais | Não altera estoque ou registros |
+
+A seção **Personalizar permissões** permite conceder ou retirar funções individualmente. Permissões são **verificadas no Cloudflare Worker antes de cada operação**, independentemente do que esteja visível na interface; usuários bloqueados são recusados na autenticação. Troca de cargo, bloqueio ou redefinição de senha invalida as sessões anteriores.
+
+O CRM continua usando a tabela original \`users\` e as credenciais existentes. A migração \`0007_user_access.sql\` cria apenas os perfis complementares e \`0008_last_admin_guard.sql\` impede que o banco fique sem administrador ativo. Somente administradores podem criar outros administradores. O sistema **não envia convites ou senhas automaticamente por e-mail**: compartilhe a senha inicial por um canal privado e peça que o colaborador a altere em **Configurações → Alterar senha**.
+
+A aplicação nunca envia hashes ou sais de senha à interface e não armazena senhas em texto puro. O registro de auditoria mantém autoria de criação, mudanças de acesso e redefinições, sem anotar a senha.
