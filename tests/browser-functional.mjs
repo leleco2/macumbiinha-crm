@@ -175,7 +175,7 @@ try{
  await loginPage.locator('#crm-access-prompt [data-access="close"]').first().click();
  await loginPage.locator('#crm-access-prompt').waitFor({state:'hidden'});
  await loginPage.reload({waitUntil:'domcontentloaded'});
- await loginPage.locator('.page-heading').waitFor();
+ await loginPage.locator('#login-form').waitFor();
  await loginPage.waitForTimeout(800);
  assert.equal(await loginPage.locator('#crm-access-prompt').count(),0,'Dismissed prompt must stay closed');
  console.log('login submitted and returned to dashboard');
