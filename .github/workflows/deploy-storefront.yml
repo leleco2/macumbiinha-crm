@@ -1,0 +1,72 @@
+name: Publicar loja Macumbiinha usando credencial do CRM
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/deploy-storefront.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macumbiinha-storefront-pages-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-storefront:
+    name: Compilar e publicar loja no Cloudflare Pages
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - name: Baixar repositório da loja
+        uses: actions/checkout@v4
+        with:
+          repository: leleco2/macumbiinha-commerce
+          ref: main
+          path: storefront
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: storefront/package-lock.json
+
+      - name: Instalar e testar a loja
+        working-directory: storefront
+        run: |
+          npm ci
+          npm test
+          npm run build
+          test -f out/index.html
+          grep -R -q "macumbiinha" out/index.html
+
+      - name: Confirmar token (sem expor o valor)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "::error::Repositório CRM não possui o segredo CLOUDFLARE_API_TOKEN."
+            exit 1
+          fi
+
+      - name: Publicar no projeto Cloudflare Pages macumbiinha
+        working-directory: storefront
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 0c4c6e226af971ccaf0490eff6b90d60
+        run: |
+          HASH="$(git rev-parse HEAD)"
+          npx --yes wrangler@4 pages deploy out --project-name macumbiinha --branch main --commit-hash "$HASH"
+
+      - name: Verificar a página
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error https://macumbiinha.pages.dev/catalogo/ | grep -F 'macumbiinha' >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 6 ]; then exit 1; fi
+            sleep 7
+          done
