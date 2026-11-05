@@ -32,7 +32,7 @@ test('UI controls: palette is local and reuses authorized CRM actions',()=>{
  assert.match(palette,/aria-modal="true"/);
  assert.match(palette,/e\.metaKey/);
  assert.match(palette,/e\.ctrlKey/);
- assert.match(palette,/data\.action/);
+ assert.match(palette,/dataset\.action/);
  assert.doesNotMatch(palette,/\bfetch\(/);
  assert.match(app,/const ICON_PATHS=/);
  assert.match(app,/data-command-open/);
