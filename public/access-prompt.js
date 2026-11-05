@@ -87,6 +87,7 @@ export function showAccessPrompt(isAuthenticated=false){
 export function setupAccessPrompt(install,notifications){
  if(initialized)return;
  initialized=true;
+ document.documentElement.dataset.accessPrompt='enabled';
  installHandler=install;
  notificationHandler=notifications;
  document.addEventListener('click',async event=>{
