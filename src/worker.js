@@ -2,7 +2,7 @@ import {STAGES,SEGMENTS,CONTACT_STATUSES,ORIGINS,ORDER_STATUSES,PAYMENTS,FINANCE
 import {dispatchPush,validateSubscription} from './push.js';
 import {publicCatalog,publicSite,publicImage,storeRoute,invoiceRoute} from './commerce-hub.js';
 import {publicGalleryPhoto} from './product-options.js';
-import {can,publicUser,publicRoles,validateAccessInput,ROLE_PRESETS,effectivePermissions} from './access-control.js';
+import {can,publicUser,publicRoles,validateAccessInput,ROLE_PRESETS,effectivePermissions,requiredPermission,redactProduct} from './access-control.js';
 
 const encoder=new TextEncoder(),SESSION_SECONDS=8*60*60;
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};
@@ -154,7 +154,7 @@ async function suppliersRoute(req,env,user){
 }
 async function productsRoute(req,env,user,path){
  if(req.method==='POST'&&path==='/api/products/import'){
-  if(user.role!=='admin')return fail('Somente administradores podem importar catálogo.',403);
+  if(!can(user,'products.manage'))return fail('Sem permissão para importar produtos.',403);
   const body=await readInput(req),list=body.items;
   if(!Array.isArray(list)||list.length<1||list.length>200)return fail('Envie de 1 a 200 produtos por lote.');
   const keys=new Set(),statements=[];
@@ -173,17 +173,19 @@ async function productsRoute(req,env,user,path){
   const query=clean(new URL(req.url).searchParams.get('q'),100),args=[];
   let sql='SELECT p.*,s.name AS supplier_name FROM products p LEFT JOIN suppliers s ON s.id=p.supplier_id';
   if(query){sql+=' WHERE p.name LIKE ? OR p.sku LIKE ?';args.push('%'+query+'%','%'+query+'%')}
-  const rows=await env.DB.prepare(sql+' ORDER BY p.updated_at DESC LIMIT 400').bind(...args).all();return response({items:rows.results});
+  const rows=await env.DB.prepare(sql+' ORDER BY p.updated_at DESC LIMIT 400').bind(...args).all();return response({items:rows.results.map(p=>redactProduct(p,can(user,'finance.view')))});
  }
  if(req.method==='POST'&&path==='/api/products'){
-  if(user.role!=='admin')return fail('Apenas administradores podem alterar estoque.',403);
+  if(!can(user,'products.manage'))return fail('Sem permissão para cadastrar produtos.',403);
   const d=productFields(await readInput(req)),id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO products(id,sku,name,category,description,cost_cents,retail_cents,wholesale_cents,quantity,min_quantity,supplier_id,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,d.sku,d.name,d.category,d.description,d.cost_cents,d.retail_cents,d.wholesale_cents,d.quantity,d.min_quantity,d.supplier_id,d.active).run();
   if(d.quantity)await env.DB.prepare('INSERT INTO inventory_movements(id,product_id,delta,reason) VALUES(?,?,?,?)').bind(crypto.randomUUID(),id,d.quantity,'estoque_inicial').run();
   await activity(env,user.id,'produto','Produto criado: '+d.name);await lowStockAlerts(env);return response({id},201);
  }
  const id=path.match(/^\/api\/products\/([a-f0-9-]+)(?:\/adjust)?$/)?.[1];
- if(!id||user.role!=='admin')return fail('Sem permissão.',403);
+ if(!id)return fail('Produto não encontrado.',404);
+ if(req.method==='PATCH'&&!can(user,'products.manage'))return fail('Sem permissão para editar produtos.',403);
+ if(path.endsWith('/adjust')&&!can(user,'inventory.adjust'))return fail('Sem permissão para movimentar estoque.',403);
  const old=await env.DB.prepare('SELECT * FROM products WHERE id=?').bind(id).first();if(!old)return fail('Produto não encontrado.',404);
  if(req.method==='PATCH'&&path===`/api/products/${id}`){
   const input=await readInput(req),d=productFields({...old,...input,quantity:old.quantity});
@@ -255,7 +257,7 @@ async function ordersRoute(req,env,user,path){
   if(status==='cancelado')await lowStockAlerts(env);
   return response({ok:true,status});
  }
- if(user.role!=='admin')return fail('Sem permissão para atualizar pagamentos.',403);
+ if(!can(user,'orders.payments'))return fail('Sem permissão para atualizar pagamentos.',403);
  const payment=choice(data.payment_status,PAYMENTS,'Pagamento');
  if(payment==='pago'&&(order.status==='novo'||order.status==='cancelado'||order.payment_status!=='pendente'))return fail('O pagamento só pode ser registrado uma vez, após confirmar um pedido ativo.',409);
  if(payment==='estornado'&&order.payment_status!=='pago')return fail('Registre um pagamento antes de realizar um estorno.',409);
@@ -267,10 +269,10 @@ async function ordersRoute(req,env,user,path){
  }
  await audit(env,user.id,'payment_'+payment,id);return response({ok:true,payment_status:payment});
 }
-async function orderDetail(req,env,id){
+async function orderDetail(req,env,id,user){
  const order=await env.DB.prepare('SELECT o.*,c.name AS contact_name,c.phone AS contact_phone FROM orders o LEFT JOIN contacts c ON c.id=o.contact_id WHERE o.id=?').bind(id).first();
  if(!order)return fail('Pedido não encontrado.',404);
- const items=await env.DB.prepare('SELECT * FROM order_items WHERE order_id=?').bind(id).all();return response({order,items:items.results});
+ const items=await env.DB.prepare('SELECT * FROM order_items WHERE order_id=?').bind(id).all();return response({order,items:items.results.map(x=>can(user,'finance.view')?x:((({unit_cost_cents,...safe})=>safe)(x)))});
 }
 async function dealsRoute(req,env,user,path){
  if(req.method==='GET'){
@@ -310,7 +312,7 @@ async function tasksRoute(req,env,user,path){
  return fail('Método não permitido.',405);
 }
 async function financeRoute(req,env,user,path){
- if(user.role!=='admin')return fail('Acesso financeiro restrito ao administrador.',403);
+ if(!can(user,req.method==='GET'?'finance.view':'finance.manage'))return fail('Acesso financeiro não autorizado.',403);
  if(req.method==='GET'){
   const rows=await env.DB.prepare('SELECT f.*,s.name AS supplier_name FROM financial_entries f LEFT JOIN suppliers s ON s.id=f.supplier_id ORDER BY f.created_at DESC LIMIT 400').all();return response({items:rows.results});
  }
@@ -339,7 +341,7 @@ async function alertsRoute(req,env,user,path){
 }
 async function activitiesRoute(req,env){const data=await env.DB.prepare('SELECT a.*,c.name AS contact_name FROM activities a LEFT JOIN contacts c ON c.id=a.contact_id ORDER BY a.created_at DESC LIMIT 200').all();return response({items:data.results})}
 async function reportsRoute(req,env,user){
- if(user.role!=='admin')return fail('Relatórios financeiros restritos ao administrador.',403);
+ if(!can(user,'reports.view'))return fail('Relatórios financeiros não autorizados.',403);
  const requested=Number(new URL(req.url).searchParams.get('period'));
  const period=[3,6,12].includes(requested)?requested:6;
  const since=`-${period-1} months`;
@@ -491,6 +493,9 @@ async function api(req,env){
   await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(user.token_hash).run();return response({ok:true},200,{'Set-Cookie':sessionCookie('',0)});
  }
  if(path==='/api/auth/password'&&method==='POST')return changePassword(req,env,user);
+ const required=requiredPermission(path,method);
+ if(required===undefined)return fail('Rota não encontrada.',404);
+ if(required&&!can(user,required))return fail('Seu cargo não possui permissão para esta operação.',403);
  if(path==='/api/push/public-key'&&method==='GET')return response({configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT),public_key:env.VAPID_PUBLIC_KEY||''});
  if(path==='/api/push/subscribe'&&method==='POST'){
   if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY)return fail('Notificação push não configurada neste servidor.',503);
@@ -507,14 +512,22 @@ async function api(req,env){
   await dispatchPush(env,{title:'Macumbiinha CRM',body:'Notificações push configuradas com sucesso.',url:'/',tag:'crm-test'});
   return response({ok:true});
  }
- if(path==='/api/dashboard'&&method==='GET')return response(await dashboard(env));
+ if(path==='/api/dashboard'&&method==='GET'){
+  const data=await dashboard(env);
+  if(!can(user,'finance.view')){
+   data.finance={received:0,spent:0,receivable:0,payable:0};
+   if(data.orders)data.orders.vendas_confirmadas=0;
+  }
+  if(!can(user,'deals.view'))data.deals=[];
+  return response(data);
+ }
  if(path.startsWith('/api/store/'))return storeRoute(req,env,user,path);
  if(path.startsWith('/api/invoices'))return invoiceRoute(req,env,user,path);
  if(path.startsWith('/api/contacts'))return contactsRoute(req,env,user,path);
  if(path==='/api/suppliers')return suppliersRoute(req,env,user);
  if(path.startsWith('/api/products'))return productsRoute(req,env,user,path);
  if(path==='/api/inventory'&&method==='GET')return inventoryRoute(req,env);
- if(/^\/api\/orders\/[a-f0-9-]+$/.test(path)&&method==='GET')return orderDetail(req,env,path.split('/').pop());
+ if(/^\/api\/orders\/[a-f0-9-]+$/.test(path)&&method==='GET')return orderDetail(req,env,path.split('/').pop(),user);
  if(path.startsWith('/api/orders'))return ordersRoute(req,env,user,path);
  if(path.startsWith('/api/deals'))return dealsRoute(req,env,user,path);
  if(path.startsWith('/api/tasks'))return tasksRoute(req,env,user,path);
