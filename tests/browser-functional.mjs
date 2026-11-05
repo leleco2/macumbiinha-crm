@@ -53,23 +53,27 @@ try{
   assert.equal(await page.locator('.nav-item').count(),10,'Navigation should load');
   assert.match(await page.locator('#workspace').innerText(),/Visão geral/);
   const sections=['orders','products','contacts','deals','finance','tasks','suppliers','activity','settings'];
+  const names={orders:'Pedidos',products:'Produtos e estoque',contacts:'Clientes e leads',deals:'Funil de vendas',finance:'Financeiro',tasks:'Tarefas',suppliers:'Fornecedores',activity:'Histórico',settings:'Configurações'};
   for(const section of sections){
    if(v.name==='mobile')await page.locator('#menu-toggle').click();
    await page.locator('.nav-item[data-nav="'+section+'"]').click();
-   await page.locator('#workspace .page-heading').waitFor({timeout:12000});
-   await page.waitForFunction(()=>document.querySelector('#workspace .skeleton')===null,{timeout:12000});
+   await page.waitForFunction(name=>document.querySelector('#workspace h1')?.textContent?.trim()===name,names[section],{timeout:11000});
+   console.log(v.name+' navigation '+section+': '+(await page.locator('#workspace h1').innerText()));
    const snapshot=(await page.locator('#workspace').innerText()).slice(0,350);
    assert.ok(!snapshot.includes('Erro ao carregar'),'Section '+section+' failed: '+snapshot);
    assert.equal(await page.locator('.page-heading').count(),1,'No heading: '+section);
   }
   if(v.name==='desktop'){
    await page.locator('.nav-item[data-nav="contacts"]').click();
-   await page.locator('button[data-action="contact-new"]').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace h1')?.textContent?.trim()==='Clientes e leads');
+   console.log('contacts actions '+JSON.stringify(await page.locator('button[data-action]').evaluateAll(nodes=>nodes.map(n=>n.dataset.action))));
+   await page.locator('button[data-action="contact-new"]').first().click({timeout:8000});
    await page.locator('#modal-layer .modal').waitFor();
    await page.locator('[data-action="modal-close"]').first().click();
    await page.locator('#modal-layer .modal').waitFor({state:'hidden'});
    await page.locator('.nav-item[data-nav="products"]').click();
-   await page.locator('button[data-action="product-new"]').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace h1')?.textContent?.trim()==='Produtos e estoque');
+   await page.locator('button[data-action="product-new"]').first().click({timeout:8000});
    await page.locator('#modal-layer .modal').waitFor();
    await page.locator('[data-action="modal-close"]').first().click();
    await page.locator('[data-command-open]').click();
