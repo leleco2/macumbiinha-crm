@@ -73,4 +73,7 @@ jobs:
           curl --fail --silent --show-error "$BASE_URL/" | grep -F "Macumbiinha — Gestão e Operação"
           curl --fail --silent --show-error "$BASE_URL/finance-analytics.js" | grep -F "Read-only visualizations"
           curl --fail --silent --show-error "$BASE_URL/experience.js" | grep -F "install"
+          curl --fail --silent --show-error "$BASE_URL/refined.css" | grep -F "Design system v2"
+          curl --fail --silent --show-error "$BASE_URL/interface.js" | grep -F "client-side navigation palette"
+          curl --fail --silent --show-error "$BASE_URL/icon.svg" | grep -F "#18392A"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$BASE_URL/api/dashboard")" = "401"
