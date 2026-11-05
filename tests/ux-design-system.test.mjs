@@ -53,7 +53,8 @@ test('PWA: branded app metadata and revised cache keys',()=>{
   assert.ok(sw.includes(asset),asset);
  }
  assert.match(sw,/startsWith\('\/api\/\'/);
- assert.match(sw,/crm-shell-v6/);
+ assert.match(sw,/crm-shell-v7/);
+ for(const name of ['team-console.js','team-console.css'])assert.ok(sw.includes(name));
  for(const asset of ['access-prompt.js','access-prompt.css'])assert.ok(sw.includes(asset),asset);
  assert.match(file('index.html'),/\/access-prompt\.css/);
 });
