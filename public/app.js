@@ -2,7 +2,7 @@ import {financialChart,expenseDonutChart} from './finance-analytics.js';
 import {setupExperience,refreshExperience,promptInstall,getTheme} from './experience.js';
 const queryRoot=(root)=>typeof root==='string'?document.querySelector(root):root;
 const $=(selector,root=document)=>queryRoot(root)?.querySelector(selector)||null;
-const $=(selector,root=document)=>[...(queryRoot(root)?.querySelectorAll(selector)||[])];
+const $$=(selector,root=document)=>[...(queryRoot(root)?.querySelectorAll(selector)||[])];
 const enc=s=>encodeURIComponent(String(s));
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const money=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((Number(n)||0)/100);
