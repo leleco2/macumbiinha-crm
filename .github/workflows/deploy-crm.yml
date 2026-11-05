@@ -48,6 +48,14 @@ jobs:
             exit 1
           fi
 
+      - name: Instalar driver para teste funcional em navegador
+        run: npm install --no-audit --no-fund --no-save playwright-core
+
+      - name: Testar menus, login, formulários e ações no Chromium
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node tests/browser-functional.mjs
+
       - name: Gerar favicon e ícones PWA atualizados
         run: npm run build:icons
 
