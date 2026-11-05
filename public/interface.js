@@ -4,6 +4,8 @@ const COMMANDS=[
  {section:'dashboard',label:'Visão geral',terms:'inicio indicadores painel',group:'Navegação'},
  {section:'orders',label:'Pedidos',terms:'encomendas compras vendas',group:'Navegação'},
  {section:'products',label:'Produtos e estoque',terms:'catalogo inventario sku',group:'Navegação'},
+ {section:'store',label:'Loja online',terms:'publicar vitrine precos catalogo site',group:'Navegação'},
+ {section:'invoices',label:'Notas e documentos',terms:'nota fiscal xml pdf compras entrada',group:'Navegação',admin:true},
  {section:'contacts',label:'Clientes e leads',terms:'relacionamento telefone',group:'Navegação'},
  {section:'deals',label:'Funil de vendas',terms:'negociacao oportunidades',group:'Navegação'},
  {section:'finance',label:'Financeiro',terms:'receitas despesas fluxo caixa',group:'Navegação',admin:true},
@@ -13,7 +15,7 @@ const COMMANDS=[
  {section:'settings',label:'Configurações',terms:'conta perfil senha',group:'Navegação'},
  {action:'order-new',label:'Criar pedido',terms:'novo pedido venda',group:'Ações rápidas'},
  {action:'contact-new',label:'Cadastrar contato',terms:'novo cliente lead',group:'Ações rápidas'},
- {action:'product-new',label:'Cadastrar produto',terms:'novo item estoque',group:'Ações rápidas'},
+ {section:'store',label:'Gerenciar publicação de produtos',terms:'cadastrar produto no site estoque varejo atacado',group:'Ações rápidas'},
  {action:'task-new',label:'Criar tarefa',terms:'nova pendencia',group:'Ações rápidas'},
  {action:'finance-new',label:'Registrar lançamento financeiro',terms:'despesa receita',group:'Ações rápidas',admin:true}
 ];

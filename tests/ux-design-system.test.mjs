@@ -53,5 +53,5 @@ test('PWA: branded app metadata and revised cache keys',()=>{
   assert.ok(sw.includes(asset),asset);
  }
  assert.match(sw,/startsWith\('\/api\/\'/);
- assert.match(sw,/crm-shell-v4/);
+ assert.match(sw,/crm-shell-v5/);
 });

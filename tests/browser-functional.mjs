@@ -15,6 +15,9 @@ const payload={
  'products':{items:[{id:'p1',name:'Produto de Teste',sku:'SKU-01',category:'Acessórios',quantity:20,min_quantity:5,active:1,retail_cents:8990,wholesale_cents:5990,cost_cents:3000}]},
  'deals':{items:[]},'finance':{items:[]},'tasks':{items:[]},'suppliers':{items:[]},'activities':{items:[]},
  'alerts':{items:[]},'reports/financial':{months:[],expense_categories:[],period_balance_cents:0,stock_value_cents:10000,margin_cents:0,receivables:{receivable:0,payable:0}},
+ 'store/catalog':{items:[{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',sku:'SKU-01',name:'Produto de Teste',category:'acessorios',description:'',quantity:20,min_quantity:5,active:1,retail_cents:8990,wholesale_cents:5990,cost_cents:3000,published:1,featured:0,for_wholesale:0,slug:'sku-01',tags_json:'[]',image_url:''}],summary:{total:1,published:1,low_stock:0,units:20},site_url:'https://macumbiinha.pages.dev'},
+ 'store/settings':{settings:{announcement:'Loja de teste',hero_title:'',hero_subtitle:'',whatsapp:'5521967199869'}},
+ 'invoices':{items:[]},
  'push/public-key':{configured:false}
 };
 const mime={'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'};
@@ -54,10 +57,10 @@ try{
   page.on('console',msg=>{if(msg.type()==='error'&&!msg.text().includes('fonts.googleapis.com'))errors.push('Console: '+msg.text())});
   await page.goto(addr,{waitUntil:'domcontentloaded'});
   await page.locator('.page-heading').waitFor({timeout:12000});
-  assert.equal(await page.locator('.nav-item').count(),10,'Navigation should load');
+  assert.equal(await page.locator('.nav-item').count(),12,'Navigation should load');
   assert.match(await page.locator('#workspace').innerText(),/Visão geral/);
-  const sections=['orders','products','contacts','deals','finance','tasks','suppliers','activity','settings'];
-  const names={orders:'Pedidos',products:'Produtos e estoque',contacts:'Clientes e leads',deals:'Funil de vendas',finance:'Financeiro',tasks:'Tarefas',suppliers:'Fornecedores',activity:'Histórico',settings:'Configurações'};
+  const sections=['orders','products','store','invoices','contacts','deals','finance','tasks','suppliers','activity','settings'];
+  const names={orders:'Pedidos',products:'Produtos e estoque',store:'Gestão da loja',invoices:'Notas e documentos',contacts:'Clientes e leads',deals:'Funil de vendas',finance:'Financeiro',tasks:'Tarefas',suppliers:'Fornecedores',activity:'Histórico',settings:'Configurações'};
   for(const section of sections){
    if(v.name==='mobile')await page.locator('#menu-toggle').click();
    await page.locator('.nav-item[data-nav="'+section+'"]').click();
@@ -73,6 +76,20 @@ try{
    assert.equal(await page.locator('.page-heading').count(),1,'No heading: '+section);
   }
   if(v.name==='desktop'){
+   await page.locator('.nav-item[data-nav="store"]').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace h1')?.textContent?.trim()==='Gestão da loja');
+   await page.locator('button[data-cm="new"]').click();
+   await page.locator('#cm-modal-layer [name="name"]').fill('Novo produto publicado');
+   await page.locator('#cm-modal-layer [name="sku"]').fill('NOVO-TESTE');
+   await page.locator('#cm-modal-layer [name="published"]').check();
+   await page.locator('#cm-modal-layer [type="submit"]').click();
+   await page.locator('#cm-modal-layer').waitFor({state:'hidden'});
+   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='store/catalog'),'Store product editor must submit');
+   await page.locator('.nav-item[data-nav="invoices"]').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace h1')?.textContent?.trim()==='Notas e documentos');
+   await page.locator('button[data-cm="invoice-new"]').click();
+   await page.locator('#cm-modal-layer [name="number"]').fill('NF-TESTE');
+   await page.locator('#cm-modal-layer .cm-close').click();
    await page.locator('.nav-item[data-nav="contacts"]').click();
    await page.waitForFunction(()=>document.querySelector('#workspace h1')?.textContent?.trim()==='Clientes e leads');
    console.log('contacts actions '+JSON.stringify(await page.locator('button[data-action]').evaluateAll(nodes=>nodes.map(n=>n.dataset.action))));
