@@ -84,3 +84,48 @@ export function validateAccessInput(body){
  }
  return {name,role,active,permissions_json};
 }
+
+/** All authenticated API endpoints must be mapped before routing.
+ * If there is no known endpoint, reject (the router will otherwise return 404).
+ */
+export function requiredPermission(path,method){
+ if(path.startsWith('/api/auth/'))return null;
+ if(path.startsWith('/api/users'))return 'users.manage';
+ if(path==='/api/dashboard')return 'dashboard.view';
+ if(path.startsWith('/api/push/'))return path==='/api/push/test'?'users.manage':'push.manage';
+ if(path==='/api/alerts/read-all')return 'alerts.manage';
+ if(path.startsWith('/api/alerts'))return 'alerts.view';
+ if(path==='/api/activities')return 'activity.view';
+ if(path==='/api/reports/financial')return 'reports.view';
+ if(path.startsWith('/api/finance'))return method==='GET'?'finance.view':'finance.manage';
+ if(path.startsWith('/api/invoices'))return method==='GET'?'invoices.view':'invoices.manage';
+ if(path==='/api/suppliers')return method==='GET'?'suppliers.view':'suppliers.manage';
+ if(path==='/api/inventory')return 'inventory.view';
+ if(path.startsWith('/api/products')){
+  if(method==='GET')return 'products.view';
+  if(path.endsWith('/adjust'))return 'inventory.adjust';
+  return 'products.manage';
+ }
+ if(path.startsWith('/api/store/')){
+  if(path.endsWith('/stock'))return 'inventory.adjust';
+  if(path.includes('/gallery')||path.endsWith('/image'))return method==='GET'?'store.view':'store.photos';
+  if(path.includes('/variants'))return method==='GET'?'store.view':'store.manage';
+  if(path==='/api/store/catalog'||path==='/api/store/settings')return method==='GET'?'store.view':'store.manage';
+  return 'store.manage';
+ }
+ if(path.startsWith('/api/orders')){
+  if(method==='GET')return 'orders.view';
+  if(path.endsWith('/payment'))return 'orders.payments';
+  if(path.endsWith('/status'))return 'orders.manage';
+  return 'orders.create';
+ }
+ if(path.startsWith('/api/contacts'))return method==='GET'?'contacts.view':'contacts.manage';
+ if(path.startsWith('/api/deals'))return method==='GET'?'deals.view':'deals.manage';
+ if(path.startsWith('/api/tasks'))return method==='GET'?'tasks.view':'tasks.manage';
+ return undefined;
+}
+export function redactProduct(product,showCost){
+ if(showCost)return product;
+ const {cost_cents:cost,supplier_id:supplier,supplier_name:supplierName,...safe}=product;
+ return safe;
+}
