@@ -16,6 +16,8 @@ const payload={
  'deals':{items:[]},'finance':{items:[]},'tasks':{items:[]},'suppliers':{items:[]},'activities':{items:[]},
  'alerts':{items:[]},'reports/financial':{months:[],expense_categories:[],period_balance_cents:0,stock_value_cents:10000,margin_cents:0,receivables:{receivable:0,payable:0}},
  'store/catalog':{items:[{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',sku:'SKU-01',name:'Produto de Teste',category:'acessorios',description:'',quantity:20,min_quantity:5,active:1,retail_cents:8990,wholesale_cents:5990,cost_cents:3000,published:1,featured:0,for_wholesale:0,slug:'sku-01',tags_json:'[]',image_url:''}],summary:{total:1,published:1,low_stock:0,units:20},site_url:'https://macumbiinha.pages.dev'},
+ 'store/products/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/variants':{items:[]},
+ 'store/products/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/gallery':{items:[]},
  'store/settings':{settings:{announcement:'Loja de teste',hero_title:'',hero_subtitle:'',whatsapp:'5521967199869'}},
  'invoices':{items:[]},
  'push/public-key':{configured:false}
@@ -85,6 +87,20 @@ try{
    await page.locator('#cm-modal-layer [type="submit"]').click();
    await page.locator('#cm-modal-layer').waitFor({state:'hidden'});
    assert.ok(requests.some(r=>r.method==='POST'&&r.key==='store/catalog'),'Store product editor must submit');
+   await page.locator('button[data-cm="variants"]').first().click();
+   await page.locator('#cm-modal-layer [data-var-action="new"]').click();
+   await page.locator('#cm-modal-layer [name="label"]').fill('King Size Black');
+   await page.locator('#cm-modal-layer [name="sku"]').fill('SEDA-KS-BLACK');
+   await page.locator('#cm-modal-layer [type="submit"]').click();
+   await page.locator('#cm-modal-layer [data-var-action="new"]').waitFor();
+   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='store/products/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/variants'),'Variant creation must submit');
+   await page.locator('#cm-modal-layer .cm-close').click();
+   await page.locator('button[data-cm="gallery"]').first().click();
+   await page.locator('#cm-modal-layer [name="files"]').setInputFiles({name:'foto-teste.png',mimeType:'image/png',buffer:Buffer.from([137,80,78,71,13,10,26,10,1])});
+   await page.locator('#cm-modal-layer [type="submit"]').click();
+   await page.locator('#cm-modal-layer').waitFor({state:'hidden'});
+   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='store/products/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/gallery'),'Photo upload must submit');
+
    await page.locator('.nav-item[data-nav="invoices"]').click();
    await page.waitForFunction(()=>document.querySelector('#workspace h1')?.textContent?.trim()==='Notas e documentos');
    await page.locator('button[data-cm="invoice-new"]').click();
