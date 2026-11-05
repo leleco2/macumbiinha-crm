@@ -2,6 +2,7 @@
 .crm-access-prompt{position:fixed;z-index:480;right:22px;bottom:max(20px,env(safe-area-inset-bottom));width:min(420px,calc(100vw - 36px));max-height:min(570px,calc(100dvh - 36px));overflow:auto;border:1px solid rgba(201,222,204,.85);border-radius:18px;background:#fff;box-shadow:0 18px 70px #091a1250,0 1px 8px #17362612;color:#213b2a;opacity:0;transform:translateY(15px);transition:transform .28s ease,opacity .28s ease;font-family:'Instrument Sans',system-ui,sans-serif}
 .crm-access-prompt.is-visible{opacity:1;transform:translateY(0)}
 .crm-access-prompt *{box-sizing:border-box}
+body[data-crm-access-stage="login"] .crm-access-prompt{left:22px;right:auto;bottom:max(20px,env(safe-area-inset-bottom))}
 .crm-access-head{display:flex;gap:11px;align-items:center;padding:18px 48px 14px 20px;background:linear-gradient(125deg,#edf6e8,#fff 77%);border-bottom:1px solid #e4ebe1}
 .crm-access-mark{display:grid;place-items:center;flex:0 0 48px;width:48px;height:48px;border:1px solid #caddc5;border-radius:12px;background:#fff}
 .crm-access-mark img{width:36px;height:36px}
@@ -34,5 +35,7 @@ html[data-theme=dark] .crm-access-action{background:#badf9e;border-color:#badf9e
 html[data-theme=dark] .crm-access-action.is-secondary{background:#284334;color:#e6f2e5;border-color:#567357}
 html[data-theme=dark] .crm-access-footer{border-color:#39513d;color:#adc6b0}
 html[data-theme=dark] .crm-access-later,html[data-theme=dark] .crm-access-status{color:#cbe4c3}
-@media(max-width:650px){.crm-access-prompt{left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));width:auto;max-height:min(530px,calc(100dvh - 20px));border-radius:16px}.crm-access-head{padding:14px 46px 12px 15px}.crm-access-body{padding:13px 15px;gap:10px}.crm-access-option{padding:11px}.crm-access-footer{padding:10px 15px 12px}}
+@media(max-width:650px){body[data-crm-access-stage="login"] .crm-access-prompt{left:10px;right:10px;top:max(8px,env(safe-area-inset-top));bottom:auto;width:auto;max-height:min(430px,calc(100dvh - 24px))}.crm-access-prompt{left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));width:auto;max-height:min(530px,calc(100dvh - 20px));border-radius:16px}.crm-access-head{padding:14px 46px 12px 15px}.crm-access-body{padding:13px 15px;gap:10px}.crm-access-option{padding:11px}.crm-access-footer{padding:10px 15px 12px}}
+@media(prefers-reduced-motion:reduce){.crm-access-prompt{transition:none;transform:none}}
+.crm-access-prompt{left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));width:auto;max-height:min(530px,calc(100dvh - 20px));border-radius:16px}.crm-access-head{padding:14px 46px 12px 15px}.crm-access-body{padding:13px 15px;gap:10px}.crm-access-option{padding:11px}.crm-access-footer{padding:10px 15px 12px}}
 @media(prefers-reduced-motion:reduce){.crm-access-prompt{transition:none;transform:none}}
