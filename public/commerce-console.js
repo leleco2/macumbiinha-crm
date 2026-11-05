@@ -41,7 +41,7 @@ function openModal(title,content,onSubmit){
  modalCleanup=()=>document.removeEventListener('keydown',escKey);
  layer.querySelector('form').addEventListener('submit',async e=>{
   e.preventDefault();const button=layer.querySelector('.cm-submit');button.disabled=true;
-  try{await onSubmit(new FormData(e.target));closeModal()}catch(err){notice(err.message,'error');button.disabled=false}
+  try{await onSubmit(new FormData(e.target));if(document.getElementById('cm-modal-layer')===layer)closeModal()}catch(err){notice(err.message,'error');button.disabled=false}
  });
  layer.querySelector('input,select,textarea,button')?.focus();
 }
@@ -287,7 +287,7 @@ async function variantManager(parent,done){
    if(action==='new')return variantEditor(parent,null,async()=>{await done();await variantManager(parent,done)});
    if(action==='edit'&&v)return variantEditor(parent,v,async()=>{await done();await variantManager(parent,done)});
    if(action==='stock'&&v)return stockEditor(v,async()=>{await done();await variantManager(parent,done)});
-   if(action==='photos'&&v)return galleryManager(v,async()=>{await done();await variantManager(parent,done)});
+   if(action==='photos'&&v)return galleryManager(v,async()=>{await done()});
   }catch(err){notice(err.message,'error')}
  };
 }
