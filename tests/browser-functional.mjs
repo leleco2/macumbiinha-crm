@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
+import {ROLE_PRESETS,ALL_PERMISSIONS} from '../src/access-control.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const payload={
@@ -20,6 +21,8 @@ const payload={
  'store/products/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/gallery':{items:[]},
  'store/settings':{settings:{announcement:'Loja de teste',hero_title:'',hero_subtitle:'',whatsapp:'5521967199869'}},
  'invoices':{items:[]},
+ 'users':{items:[{id:'u',email:'teste@example.org',name:'Admin Teste',role:'administrador',role_label:'Administrador',permissions:ALL_PERMISSIONS,active:true,created_at:'2026-11-05',custom_permissions:false}]},
+ 'users/roles':{roles:Object.entries(ROLE_PRESETS).map(([key,v])=>({key,label:v.label,description:v.description,permissions:[...v.permissions]}))},
  'push/public-key':{configured:false}
 };
 const mime={'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'};
@@ -66,10 +69,10 @@ try{
   assert.equal(requests.some(x=>x.key==='push/subscribe'),false,'No unsolicited notifications');
   await page.locator('#crm-access-prompt .crm-access-close').click();
   await page.locator('#crm-access-prompt').waitFor({state:'hidden'});
-    assert.equal(await page.locator('.nav-item').count(),12,'Navigation should load');
+    assert.equal(await page.locator('.nav-item').count(),13,'Navigation should load');
   assert.match(await page.locator('#workspace').innerText(),/Visão geral/);
-  const sections=['orders','products','store','invoices','contacts','deals','finance','tasks','suppliers','activity','settings'];
-  const names={orders:'Pedidos',products:'Produtos e estoque',store:'Gestão da loja',invoices:'Notas e documentos',contacts:'Clientes e leads',deals:'Funil de vendas',finance:'Financeiro',tasks:'Tarefas',suppliers:'Fornecedores',activity:'Histórico',settings:'Configurações'};
+  const sections=['orders','products','store','invoices','contacts','deals','finance','tasks','suppliers','activity','users','settings'];
+  const names={orders:'Pedidos',products:'Produtos e estoque',store:'Gestão da loja',invoices:'Notas e documentos',contacts:'Clientes e leads',deals:'Funil de vendas',finance:'Financeiro',tasks:'Tarefas',suppliers:'Fornecedores',activity:'Histórico',users:'Usuários e permissões',settings:'Configurações'};
   for(const section of sections){
    if(v.name==='mobile')await page.locator('#menu-toggle').click();
    await page.locator('.nav-item[data-nav="'+section+'"]').click();
@@ -85,6 +88,17 @@ try{
    assert.equal(await page.locator('.page-heading').count(),1,'No heading: '+section);
   }
   if(v.name==='desktop'){
+   await page.locator('.nav-item[data-nav="users"]').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace h1')?.textContent?.trim()==='Usuários e permissões');
+   await page.locator('button[data-team="new"]').click();
+   await page.locator('#team-modal-layer [name="name"]').fill('Julia Financeiro');
+   await page.locator('#team-modal-layer [name="email"]').fill('julia@example.org');
+   await page.locator('#team-modal-layer [name="password"]').fill('SenhaTemporariaMuitoForte2026');
+   await page.locator('#team-modal-layer [name="role"]').selectOption('financeiro');
+   assert.equal(await page.locator('#team-modal-layer [name="permission"][value="users.manage"]').isDisabled(),true,'Financial employee must not gain user management');
+   await page.locator('#team-modal-layer [type="submit"]').click();
+   await page.locator('#team-modal-layer').waitFor({state:'hidden'});
+   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='users'),'Collaborator creation must submit');
    await page.locator('.nav-item[data-nav="store"]').click();
    await page.waitForFunction(()=>document.querySelector('#workspace h1')?.textContent?.trim()==='Gestão da loja');
    await page.locator('button[data-cm="new"]').click();

@@ -48,4 +48,22 @@ class StoreRules(unittest.TestCase):
         self.db.execute("INSERT INTO product_gallery(id,product_id,file_name,mime_type,file_size,body) VALUES('img1','v2','foto.webp','image/webp',12,zeroblob(12))")
         self.assertEqual(self.db.execute("SELECT product_id FROM product_gallery WHERE id='img1'").fetchone()[0],'v2')
 
+    def test_user_access_cannot_disable_last_active_admin(self):
+        self.db.execute("INSERT INTO users(id,email,password_salt,password_hash,role) VALUES('admin-a','a@example.org','salt','hash','admin')")
+        self.db.execute("INSERT INTO user_access(user_id,display_name,role_key,active) VALUES('admin-a','Admin A','administrador',1)")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("UPDATE user_access SET active=0 WHERE user_id='admin-a'")
+        self.assertEqual(self.db.execute("SELECT active FROM user_access WHERE user_id='admin-a'").fetchone()[0],1)
+        self.db.execute("INSERT INTO users(id,email,password_salt,password_hash,role) VALUES('admin-b','b@example.org','salt','hash','admin')")
+        self.db.execute("INSERT INTO user_access(user_id,display_name,role_key,active) VALUES('admin-b','Admin B','administrador',1)")
+        self.db.execute("UPDATE user_access SET role_key='financeiro' WHERE user_id='admin-b'")
+        self.assertEqual(self.db.execute("SELECT role_key FROM user_access WHERE user_id='admin-b'").fetchone()[0],'financeiro')
+    def test_staff_disabled_flag_and_role_constraints(self):
+        self.db.execute("INSERT INTO users(id,email,password_salt,password_hash,role) VALUES('staff','staff@example.org','salt','hash','operador')")
+        self.db.execute("INSERT INTO user_access(user_id,display_name,role_key,active) VALUES('staff','Pessoa Estoque','estoque',1)")
+        self.db.execute("UPDATE user_access SET active=0 WHERE user_id='staff'")
+        self.assertEqual(self.db.execute("SELECT active FROM user_access WHERE user_id='staff'").fetchone()[0],0)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("UPDATE user_access SET role_key='superadmin' WHERE user_id='staff'")
+
 if __name__=='__main__':unittest.main()

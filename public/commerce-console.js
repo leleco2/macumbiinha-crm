@@ -74,7 +74,8 @@ function openModal(title,content,onSubmit){
  layer.querySelector('input,select,textarea,button')?.focus();
 }
 function closeModal(){modalCleanup?.();modalCleanup=null;document.getElementById('cm-modal-layer')?.remove()}
-function productsTable(items,admin){
+function productsTable(items,permissions=[]){
+ const manage=permissions.includes('store.manage'),stock=permissions.includes('inventory.adjust'),photos=permissions.includes('store.photos');
  if(!items.length)return '<div class="cm-empty">Nenhum produto encontrado. Cadastre um item ou altere os filtros.</div>';
  return '<div class="table-scroll"><table class="cm-table"><thead><tr><th>PRODUTO</th><th>VAREJO</th><th>ATACADO</th><th>ESTOQUE</th><th>SITE</th><th>GESTÃO</th></tr></thead><tbody>'+items.map(p=>{
   const pub=!!p.published&&!!p.active,stock=p.variants?.length?p.variants.reduce((n,v)=>n+Number(v.quantity||0),0):Number(p.quantity)||0;
@@ -82,8 +83,8 @@ function productsTable(items,admin){
    '<td>'+ (p.retail_cents?fmt(p.retail_cents):'A definir')+'</td><td>'+(p.wholesale_cents?fmt(p.wholesale_cents):'A definir')+'</td>'+
    '<td>'+tag(stock+' un.',stock<=p.min_quantity?'warning':'ok')+'</td>'+
    '<td>'+tag(pub?'Publicado':'Rascunho',pub?'ok':'')+'</td>'+
-   '<td><div class="cm-row-actions"><button data-cm="edit" data-id="'+esc(p.id)+'">Editar</button>'+ (admin?'<button data-cm="variants" data-id="'+esc(p.id)+'">Variações ('+(p.variants?.length||0)+')</button><button data-cm="gallery" data-id="'+esc(p.id)+'">Fotos ('+(p.photos?.length||0)+')</button>':'') +
-   (admin?''+(!p.variants?.length?'<button data-cm="stock" data-id="'+esc(p.id)+'">Estoque</button>':'')+'<button data-cm="toggle" data-id="'+esc(p.id)+'">'+(pub?'Ocultar':'Publicar')+'</button>':'')+
+   '<td><div class="cm-row-actions">'+(manage?'<button data-cm="edit" data-id="'+esc(p.id)+'">Editar</button><button data-cm="variants" data-id="'+esc(p.id)+'">Variações ('+(p.variants?.length||0)+')</button>':'') + (photos?'<button data-cm="gallery" data-id="'+esc(p.id)+'">Fotos ('+(p.photos?.length||0)+')</button>':'') +
+   (stock&&!p.variants?.length?'<button data-cm="stock" data-id="'+esc(p.id)+'">Estoque</button>':'')+(manage?'<button data-cm="toggle" data-id="'+esc(p.id)+'">'+(pub?'Ocultar':'Publicar')+'</button>':'')+
    '</div></td></tr>';
  }).join('')+'</tbody></table></div>';
 }
@@ -151,7 +152,7 @@ function settingEditor(settings,done){
   await request('store/settings','PATCH',Object.fromEntries(fd.entries()));notice('Configurações publicadas.');await done();
  });
 }
-export async function renderCommerceScreen({root,admin}){
+export async function renderCommerceScreen({root,permissions=[]}){const admin=permissions.includes('store.manage');
  root.innerHTML='<div class="cm-loading">Carregando produtos da loja…</div>';
  const response=await request('store/catalog');
  const products=response.items;
@@ -162,14 +163,14 @@ export async function renderCommerceScreen({root,admin}){
  '<div class="cm-help"><div><strong>Catálogo vinculado ao site</strong><p>Os produtos publicados aparecem em varejo e atacado. Estoque zero fica indisponível, e preço zero fica sob consulta.</p></div><a href="'+esc(response.site_url||'https://macumbiinha.pages.dev')+'" target="_blank" rel="noopener noreferrer">Ver loja ↗</a></div>'+
  '<section class="panel cm-panel"><div class="cm-toolbar"><label class="cm-search"><span>Buscar produtos</span><input id="cm-search" type="search" placeholder="Nome, SKU ou categoria"></label>'+
  '<label class="cm-filter"><span>Publicação</span><select id="cm-filter"><option value="all">Todos</option><option value="published">Publicados</option><option value="draft">Rascunhos</option><option value="low">Estoque baixo</option></select></label>'+
- '<button class="btn ghost" data-cm="reload">Atualizar</button></div><div id="cm-table">'+productsTable(products,admin)+'</div></section>'+
+ '<button class="btn ghost" data-cm="reload">Atualizar</button></div><div id="cm-table">'+productsTable(products,permissions)+'</div></section>'+
  '<p class="cm-hint cm-footer-note">Variações têm SKU, estoque e preço próprios, mas aparecem agrupadas em um único produto na loja. Custos e fornecedores nunca são exibidos no site.</p>';
- const refresh=()=>renderCommerceScreen({root,admin});
+ const refresh=()=>renderCommerceScreen({root,permissions});
  const paint=()=>{
   const q=String(root.querySelector('#cm-search')?.value||'').toLowerCase().trim(),mode=root.querySelector('#cm-filter')?.value;
   const rows=products.filter(p=>(p.name+' '+p.sku+' '+p.category).toLowerCase().includes(q))
    .filter(p=>mode==='all'||(mode==='published'&&p.published&&p.active)||(mode==='draft'&&(!p.published||!p.active))||(mode==='low'&&p.quantity<=p.min_quantity));
-  const box=root.querySelector('#cm-table');if(box)box.innerHTML=productsTable(rows,admin);
+  const box=root.querySelector('#cm-table');if(box)box.innerHTML=productsTable(rows,permissions);
  };
  root.querySelector('#cm-search').addEventListener('input',paint);
  root.querySelector('#cm-filter').addEventListener('change',paint);
@@ -192,20 +193,20 @@ export async function renderCommerceScreen({root,admin}){
   }catch(err){notice(err.message,'error')}
  };
 }
-export async function renderInvoiceScreen({root,admin}){
+export async function renderInvoiceScreen({root,view=false,manage=false}){
  root.innerHTML='<div class="cm-loading">Carregando documentos…</div>';
- if(!admin){root.innerHTML='<div class="empty-state"><h3>Acesso restrito</h3><p>Somente administradores podem consultar documentos fiscais.</p></div>';return}
+ if(!view){root.innerHTML='<div class="empty-state"><h3>Acesso restrito</h3><p>Seu cargo não permite consultar documentos fiscais.</p></div>';return}
  const records=(await request('invoices')).items;
- root.innerHTML='<div class="page-heading"><div><span class="eyebrow">COMPRAS / DOCUMENTOS</span><h1>Notas e documentos</h1><p>Guarde XML de NF-e e DANFE em PDF com os dados do fornecedor. O envio não gera nem autoriza nota fiscal na SEFAZ.</p></div><div class="heading-actions"><button class="btn primary" data-cm="invoice-new">+ Enviar nota</button></div></div>'+
- '<div class="cm-help"><div><strong>Arquivo interno protegido</strong><p>Somente administradores autenticados podem enviar ou baixar arquivos. Limite atual: 1 MB por PDF/XML.</p></div><span>'+records.length+' documentos</span></div>'+
+ root.innerHTML='<div class="page-heading"><div><span class="eyebrow">COMPRAS / DOCUMENTOS</span><h1>Notas e documentos</h1><p>Guarde XML de NF-e e DANFE em PDF com os dados do fornecedor. O envio não gera nem autoriza nota fiscal na SEFAZ.</p></div><div class="heading-actions">'+(manage?'<button class="btn primary" data-cm="invoice-new">+ Enviar nota</button>':'')+'</div></div>'+
+ '<div class="cm-help"><div><strong>Arquivo interno protegido</strong><p>Somente colaboradores autorizados podem consultar ou enviar documentos. Limite atual: 1 MB por PDF/XML.</p></div><span>'+records.length+' documentos</span></div>'+
  '<section class="panel cm-panel"><div class="panel-head"><h3>Documentos arquivados</h3></div><div class="table-scroll"><table class="cm-table"><thead><tr><th>ARQUIVO</th><th>FORNECEDOR</th><th>EMISSÃO</th><th>VALOR</th><th>AÇÕES</th></tr></thead><tbody>'+
- (records.length?records.map(d=>'<tr><td><strong>'+esc(d.original_filename)+'</strong><small>'+esc(d.number||'Sem número')+' · '+(d.file_size/1024).toFixed(0)+' KB</small></td><td>'+esc(d.supplier_name||'—')+'</td><td>'+esc(d.issue_date||'—')+'</td><td>'+fmt(d.total_cents)+'</td><td class="cm-row-actions"><a href="/api/invoices/'+esc(d.id)+'/download">Baixar</a><button data-cm="invoice-delete" data-id="'+esc(d.id)+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="5" class="cm-empty">Nenhum documento enviado ainda.</td></tr>')+
+ (records.length?records.map(d=>'<tr><td><strong>'+esc(d.original_filename)+'</strong><small>'+esc(d.number||'Sem número')+' · '+(d.file_size/1024).toFixed(0)+' KB</small></td><td>'+esc(d.supplier_name||'—')+'</td><td>'+esc(d.issue_date||'—')+'</td><td>'+fmt(d.total_cents)+'</td><td class="cm-row-actions"><a href="/api/invoices/'+esc(d.id)+'/download">Baixar</a>'+(manage?'<button data-cm="invoice-delete" data-id="'+esc(d.id)+'">Excluir</button>':'')+'</td></tr>').join(''):'<tr><td colspan="5" class="cm-empty">Nenhum documento enviado ainda.</td></tr>')+
  '</tbody></table></div></section>';
  root.onclick=async e=>{
   const btn=e.target.closest('[data-cm]');if(!btn)return;
   if(btn.dataset.cm==='invoice-delete'){
    if(!confirm('Excluir este documento permanentemente?'))return;
-   try{await request('invoices/'+btn.dataset.id,'DELETE');notice('Documento removido.');renderInvoiceScreen({root,admin})}catch(err){notice(err.message,'error')}return;
+   try{await request('invoices/'+btn.dataset.id,'DELETE');notice('Documento removido.');renderInvoiceScreen({root,view,manage})}catch(err){notice(err.message,'error')}return;
   }
   if(btn.dataset.cm==='invoice-new'){
    const content='<div class="cm-form-grid">'+formField('Número da nota','number','','text','maxlength="60"')+

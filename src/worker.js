@@ -2,6 +2,7 @@ import {STAGES,SEGMENTS,CONTACT_STATUSES,ORIGINS,ORDER_STATUSES,PAYMENTS,FINANCE
 import {dispatchPush,validateSubscription} from './push.js';
 import {publicCatalog,publicSite,publicImage,storeRoute,invoiceRoute} from './commerce-hub.js';
 import {publicGalleryPhoto} from './product-options.js';
+import {can,publicUser,publicRoles,validateAccessInput,ROLE_PRESETS,effectivePermissions,requiredPermission,redactProduct} from './access-control.js';
 
 const encoder=new TextEncoder(),SESSION_SECONDS=8*60*60;
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};
@@ -36,8 +37,8 @@ async function readInput(req){
 async function currentUser(request,env){
  const token=cookies(request,'crm_session');if(!token)return null;
  const token_hash=await sha(token);
- const user=await env.DB.prepare('SELECT u.id,u.email,u.role,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').bind(token_hash).first();
- if(!user||user.expires_at<=now())return null;
+ const user=await env.DB.prepare('SELECT u.id,u.email,u.role,a.display_name AS name,a.role_key,a.permissions_json,COALESCE(a.active,1) AS active,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN user_access a ON a.user_id=u.id WHERE s.token_hash=?').bind(token_hash).first();
+ if(!user||user.expires_at<=now()||user.active===0)return null;
  return {...user,token_hash};
 }
 async function audit(env,user,action,target){await env.DB.prepare('INSERT INTO audit_events(id,actor_id,action,target_id) VALUES(?,?,?,?)').bind(crypto.randomUUID(),user||null,action,target||null).run()}
@@ -69,10 +70,10 @@ async function login(req,env){
  const key=await sha(email+'|'+(req.headers.get('CF-Connecting-IP')||'local'));
  const attempts=await env.DB.prepare('SELECT attempts,first_attempt FROM login_limits WHERE id=?').bind(key).first();
  if(attempts&&attempts.attempts>=8&&now()-attempts.first_attempt<900)return fail('Muitas tentativas. Tente novamente após 15 minutos.',429);
- const user=await env.DB.prepare('SELECT id,email,role,password_hash,password_salt FROM users WHERE email=?').bind(email).first();
+ const user=await env.DB.prepare('SELECT u.id,u.email,u.role,u.password_hash,u.password_salt,a.display_name AS name,a.role_key,a.permissions_json,COALESCE(a.active,1) AS active FROM users u LEFT JOIN user_access a ON a.user_id=u.id WHERE u.email=?').bind(email).first();
  const salt=user?.password_salt||'00112233445566778899aabbccddeeff';
  const candidate=await passwordHash(password,salt);
- if(!user||!constantEquals(candidate,user.password_hash)){
+ if(!user||!constantEquals(candidate,user.password_hash)||user.active===0){
   await env.DB.prepare('INSERT INTO login_limits(id,attempts,first_attempt) VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET attempts=CASE WHEN first_attempt<? THEN 1 ELSE attempts+1 END,first_attempt=CASE WHEN first_attempt<? THEN excluded.first_attempt ELSE first_attempt END').bind(key,now(),now()-900,now()-900).run();
   return fail('E-mail ou senha incorretos.',401);
  }
@@ -80,7 +81,7 @@ async function login(req,env){
  const raw=hex(crypto.getRandomValues(new Uint8Array(32))),hash=await sha(raw);
  await env.DB.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').bind(hash,user.id,now()+SESSION_SECONDS).run();
  await audit(env,user.id,'login',user.id);
- return response({user:{id:user.id,email:user.email,role:user.role}},200,{'Set-Cookie':sessionCookie(raw,SESSION_SECONDS)});
+ return response({user:publicUser(user)},200,{'Set-Cookie':sessionCookie(raw,SESSION_SECONDS)});
 }
 async function changePassword(req,env,user){
  const data=await readInput(req),current=data.current_password,next=data.new_password;
@@ -153,7 +154,7 @@ async function suppliersRoute(req,env,user){
 }
 async function productsRoute(req,env,user,path){
  if(req.method==='POST'&&path==='/api/products/import'){
-  if(user.role!=='admin')return fail('Somente administradores podem importar catálogo.',403);
+  if(!can(user,'products.manage'))return fail('Sem permissão para importar produtos.',403);
   const body=await readInput(req),list=body.items;
   if(!Array.isArray(list)||list.length<1||list.length>200)return fail('Envie de 1 a 200 produtos por lote.');
   const keys=new Set(),statements=[];
@@ -172,20 +173,22 @@ async function productsRoute(req,env,user,path){
   const query=clean(new URL(req.url).searchParams.get('q'),100),args=[];
   let sql='SELECT p.*,s.name AS supplier_name FROM products p LEFT JOIN suppliers s ON s.id=p.supplier_id';
   if(query){sql+=' WHERE p.name LIKE ? OR p.sku LIKE ?';args.push('%'+query+'%','%'+query+'%')}
-  const rows=await env.DB.prepare(sql+' ORDER BY p.updated_at DESC LIMIT 400').bind(...args).all();return response({items:rows.results});
+  const rows=await env.DB.prepare(sql+' ORDER BY p.updated_at DESC LIMIT 400').bind(...args).all();return response({items:rows.results.map(p=>redactProduct(p,can(user,'finance.view')))});
  }
  if(req.method==='POST'&&path==='/api/products'){
-  if(user.role!=='admin')return fail('Apenas administradores podem alterar estoque.',403);
-  const d=productFields(await readInput(req)),id=crypto.randomUUID();
+  if(!can(user,'products.manage'))return fail('Sem permissão para cadastrar produtos.',403);
+  const input=await readInput(req),d=productFields({...input,cost_cents:can(user,'finance.view')?input.cost_cents:0}),id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO products(id,sku,name,category,description,cost_cents,retail_cents,wholesale_cents,quantity,min_quantity,supplier_id,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,d.sku,d.name,d.category,d.description,d.cost_cents,d.retail_cents,d.wholesale_cents,d.quantity,d.min_quantity,d.supplier_id,d.active).run();
   if(d.quantity)await env.DB.prepare('INSERT INTO inventory_movements(id,product_id,delta,reason) VALUES(?,?,?,?)').bind(crypto.randomUUID(),id,d.quantity,'estoque_inicial').run();
   await activity(env,user.id,'produto','Produto criado: '+d.name);await lowStockAlerts(env);return response({id},201);
  }
  const id=path.match(/^\/api\/products\/([a-f0-9-]+)(?:\/adjust)?$/)?.[1];
- if(!id||user.role!=='admin')return fail('Sem permissão.',403);
+ if(!id)return fail('Produto não encontrado.',404);
+ if(req.method==='PATCH'&&!can(user,'products.manage'))return fail('Sem permissão para editar produtos.',403);
+ if(path.endsWith('/adjust')&&!can(user,'inventory.adjust'))return fail('Sem permissão para movimentar estoque.',403);
  const old=await env.DB.prepare('SELECT * FROM products WHERE id=?').bind(id).first();if(!old)return fail('Produto não encontrado.',404);
  if(req.method==='PATCH'&&path===`/api/products/${id}`){
-  const input=await readInput(req),d=productFields({...old,...input,quantity:old.quantity});
+  const input=await readInput(req),d=productFields({...old,...input,quantity:old.quantity,cost_cents:can(user,'finance.view')?(input.cost_cents??old.cost_cents):old.cost_cents});
   await env.DB.prepare("UPDATE products SET sku=?,name=?,category=?,description=?,cost_cents=?,retail_cents=?,wholesale_cents=?,min_quantity=?,supplier_id=?,active=?,updated_at=datetime('now') WHERE id=?").bind(d.sku,d.name,d.category,d.description,d.cost_cents,d.retail_cents,d.wholesale_cents,d.min_quantity,d.supplier_id,d.active,id).run();
   await audit(env,user.id,'product_update',id);await lowStockAlerts(env);return response({ok:true});
  }
@@ -254,7 +257,7 @@ async function ordersRoute(req,env,user,path){
   if(status==='cancelado')await lowStockAlerts(env);
   return response({ok:true,status});
  }
- if(user.role!=='admin')return fail('Sem permissão para atualizar pagamentos.',403);
+ if(!can(user,'orders.payments'))return fail('Sem permissão para atualizar pagamentos.',403);
  const payment=choice(data.payment_status,PAYMENTS,'Pagamento');
  if(payment==='pago'&&(order.status==='novo'||order.status==='cancelado'||order.payment_status!=='pendente'))return fail('O pagamento só pode ser registrado uma vez, após confirmar um pedido ativo.',409);
  if(payment==='estornado'&&order.payment_status!=='pago')return fail('Registre um pagamento antes de realizar um estorno.',409);
@@ -266,10 +269,10 @@ async function ordersRoute(req,env,user,path){
  }
  await audit(env,user.id,'payment_'+payment,id);return response({ok:true,payment_status:payment});
 }
-async function orderDetail(req,env,id){
+async function orderDetail(req,env,id,user){
  const order=await env.DB.prepare('SELECT o.*,c.name AS contact_name,c.phone AS contact_phone FROM orders o LEFT JOIN contacts c ON c.id=o.contact_id WHERE o.id=?').bind(id).first();
  if(!order)return fail('Pedido não encontrado.',404);
- const items=await env.DB.prepare('SELECT * FROM order_items WHERE order_id=?').bind(id).all();return response({order,items:items.results});
+ const items=await env.DB.prepare('SELECT * FROM order_items WHERE order_id=?').bind(id).all();return response({order,items:items.results.map(x=>can(user,'finance.view')?x:((({unit_cost_cents,...safe})=>safe)(x)))});
 }
 async function dealsRoute(req,env,user,path){
  if(req.method==='GET'){
@@ -309,7 +312,7 @@ async function tasksRoute(req,env,user,path){
  return fail('Método não permitido.',405);
 }
 async function financeRoute(req,env,user,path){
- if(user.role!=='admin')return fail('Acesso financeiro restrito ao administrador.',403);
+ if(!can(user,req.method==='GET'?'finance.view':'finance.manage'))return fail('Acesso financeiro não autorizado.',403);
  if(req.method==='GET'){
   const rows=await env.DB.prepare('SELECT f.*,s.name AS supplier_name FROM financial_entries f LEFT JOIN suppliers s ON s.id=f.supplier_id ORDER BY f.created_at DESC LIMIT 400').all();return response({items:rows.results});
  }
@@ -338,7 +341,7 @@ async function alertsRoute(req,env,user,path){
 }
 async function activitiesRoute(req,env){const data=await env.DB.prepare('SELECT a.*,c.name AS contact_name FROM activities a LEFT JOIN contacts c ON c.id=a.contact_id ORDER BY a.created_at DESC LIMIT 200').all();return response({items:data.results})}
 async function reportsRoute(req,env,user){
- if(user.role!=='admin')return fail('Relatórios financeiros restritos ao administrador.',403);
+ if(!can(user,'reports.view'))return fail('Relatórios financeiros não autorizados.',403);
  const requested=Number(new URL(req.url).searchParams.get('period'));
  const period=[3,6,12].includes(requested)?requested:6;
  const since=`-${period-1} months`;
@@ -354,15 +357,62 @@ async function reportsRoute(req,env,user){
  const rows=months.results||[];
  const period_balance_cents=rows.reduce((sum,row)=>sum+Number(row.income_cents||0)-Number(row.expense_cents||0),0);
  return response({period,months:rows,expense_categories,period_balance_cents,margin_cents:margin.margin_cents||0,stock_value_cents:stock.value_cents||0,receivables});
-}async function usersRoute(req,env,user){
- if(user.role!=='admin')return fail('Sem permissão.',403);
- if(req.method==='GET'){const result=await env.DB.prepare('SELECT id,email,role,created_at FROM users ORDER BY created_at DESC').all();return response({items:result.results})}
- if(req.method==='POST'){
-  const d=await readInput(req),email=clean(d.email,160).toLowerCase(),password=d.password,role=choice(d.role||'operador',['admin','operador'],'Papel');
-  if(!email||!emailOk(email)||typeof password!=='string'||password.length<14||password.length>120)return fail('E-mail e senha segura são obrigatórios (14 caracteres no mínimo).');
+}async function usersRoute(req,env,user,path){
+ if(!can(user,'users.manage'))return fail('Sem permissão para gerenciar colaboradores.',403);
+ const method=req.method;
+ if(path==='/api/users/roles'&&method==='GET')return response({roles:publicRoles()});
+ if(path==='/api/users'&&method==='GET'){
+  const result=await env.DB.prepare('SELECT u.id,u.email,u.role,u.created_at,COALESCE(a.display_name,substr(u.email,1,instr(u.email,\'@\')-1)) AS name,COALESCE(a.role_key,CASE WHEN u.role=\'admin\' THEN \'administrador\' ELSE \'vendas\' END) AS role_key,COALESCE(a.active,1) AS active,a.permissions_json FROM users u LEFT JOIN user_access a ON a.user_id=u.id ORDER BY u.created_at DESC LIMIT 300').all();
+  return response({items:result.results.map(row=>({...publicUser(row),created_at:row.created_at,custom_permissions:row.permissions_json!==null&&row.permissions_json!==undefined,permissions:effectivePermissions(row)}))});
+ }
+ if(path==='/api/users'&&method==='POST'){
+  const body=await readInput(req),email=clean(body.email,160).toLowerCase(),password=body.password;
+  if(!emailOk(email)||typeof password!=='string'||password.length<14||password.length>120)return fail('Informe e-mail válido e senha de 14 a 120 caracteres.');
+  const data=validateAccessInput(body),role=data.role==='administrador'?'admin':'operador';
+  const existing=await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
+  if(existing)return fail('Já existe um colaborador com esse e-mail.',409);
   const id=crypto.randomUUID(),salt=hex(crypto.getRandomValues(new Uint8Array(16))),hash=await passwordHash(password,salt);
-  await env.DB.prepare('INSERT INTO users(id,email,password_salt,password_hash,role) VALUES(?,?,?,?,?)').bind(id,email,salt,hash,role).run();
-  await audit(env,user.id,'user_create',id);return response({id},201);
+  await env.DB.batch([
+   env.DB.prepare('INSERT INTO users(id,email,password_salt,password_hash,role) VALUES(?,?,?,?,?)').bind(id,email,salt,hash,role),
+   env.DB.prepare('INSERT INTO user_access(user_id,display_name,role_key,permissions_json,active) VALUES(?,?,?,?,?)').bind(id,data.name,data.role,data.permissions_json,data.active)
+  ]);
+  await audit(env,user.id,'staff_create',id);return response({ok:true,id},201);
+ }
+ const match=path.match(/^\/api\/users\/([a-f0-9-]{36})(?:\/password)?$/);
+ if(!match)return fail('Rota de colaboradores não encontrada.',404);
+ const targetId=match[1];
+ const target=await env.DB.prepare('SELECT u.id,u.email,u.role,a.display_name AS name,a.role_key,a.permissions_json,COALESCE(a.active,1) AS active FROM users u LEFT JOIN user_access a ON a.user_id=u.id WHERE u.id=?').bind(targetId).first();
+ if(!target)return fail('Colaborador não encontrado.',404);
+ if(path.endsWith('/password')&&method==='POST'){
+  const body=await readInput(req),password=body.password;
+  if(typeof password!=='string'||password.length<14||password.length>120)return fail('A senha deve ter entre 14 e 120 caracteres.');
+  const salt=hex(crypto.getRandomValues(new Uint8Array(16))),hash=await passwordHash(password,salt);
+  await env.DB.batch([
+   env.DB.prepare("UPDATE users SET password_salt=?,password_hash=?,updated_at=datetime('now') WHERE id=?").bind(salt,hash,targetId),
+   env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(targetId)
+  ]);
+  await audit(env,user.id,'staff_password_reset',targetId);return response({ok:true});
+ }
+ if(method==='PATCH'&&!path.endsWith('/password')){
+  const body=await readInput(req);
+  const data=validateAccessInput({...target,...body,
+   name:body.name??target.name??target.email.split('@')[0],
+   role:body.role??(target.role_key||(target.role==='admin'?'administrador':'vendas')),
+   active:body.active??target.active,
+   permissions:body.permissions===undefined?target.permissions_json?JSON.parse(target.permissions_json):null:body.permissions
+  });
+  if(targetId===user.id&&(data.active===0||data.role!=='administrador'))return fail('Você não pode bloquear ou rebaixar a própria conta administrativa.',409);
+  const oldRole=target.role_key||(target.role==='admin'?'administrador':'vendas');
+  if(oldRole==='administrador'&& (data.role!=='administrador'||data.active===0)){
+   const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM users u LEFT JOIN user_access a ON a.user_id=u.id WHERE COALESCE(a.role_key,CASE WHEN u.role='admin' THEN 'administrador' ELSE 'vendas' END)='administrador' AND COALESCE(a.active,1)=1").first();
+   if(row.n<=1)return fail('Mantenha pelo menos um administrador ativo.',409);
+  }
+  await env.DB.batch([
+   env.DB.prepare("UPDATE users SET role=?,updated_at=datetime('now') WHERE id=?").bind(data.role==='administrador'?'admin':'operador',targetId),
+   env.DB.prepare("INSERT INTO user_access(user_id,display_name,role_key,permissions_json,active) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET display_name=excluded.display_name,role_key=excluded.role_key,permissions_json=excluded.permissions_json,active=excluded.active,updated_at=datetime('now')").bind(targetId,data.name,data.role,data.permissions_json,data.active),
+   env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(targetId)
+  ]);
+  await audit(env,user.id,'staff_permissions_update',targetId);return response({ok:true});
  }
  return fail('Método não permitido.',405);
 }
@@ -438,11 +488,14 @@ async function api(req,env){
  if(path==='/api/auth/login'&&method==='POST')return login(req,env);
  const user=await currentUser(req,env);
  if(!user)return fail('Sua sessão expirou. Entre novamente.',401);
- if(path==='/api/auth/me'&&method==='GET')return response({user:{id:user.id,email:user.email,role:user.role}});
+ if(path==='/api/auth/me'&&method==='GET')return response({user:publicUser(user)});
  if(path==='/api/auth/logout'&&method==='POST'){
   await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(user.token_hash).run();return response({ok:true},200,{'Set-Cookie':sessionCookie('',0)});
  }
  if(path==='/api/auth/password'&&method==='POST')return changePassword(req,env,user);
+ const required=requiredPermission(path,method);
+ if(required===undefined)return fail('Rota não encontrada.',404);
+ if(required&&!can(user,required))return fail('Seu cargo não possui permissão para esta operação.',403);
  if(path==='/api/push/public-key'&&method==='GET')return response({configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT),public_key:env.VAPID_PUBLIC_KEY||''});
  if(path==='/api/push/subscribe'&&method==='POST'){
   if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY)return fail('Notificação push não configurada neste servidor.',503);
@@ -459,14 +512,28 @@ async function api(req,env){
   await dispatchPush(env,{title:'Macumbiinha CRM',body:'Notificações push configuradas com sucesso.',url:'/',tag:'crm-test'});
   return response({ok:true});
  }
- if(path==='/api/dashboard'&&method==='GET')return response(await dashboard(env));
+ if(path==='/api/dashboard'&&method==='GET'){
+  const data=await dashboard(env);
+  if(!can(user,'finance.view')){
+   data.finance={received:0,spent:0,receivable:0,payable:0};
+   if(data.orders)data.orders.vendas_confirmadas=0;
+  }
+  if(!can(user,'orders.view'))data.orders={total:0,novos:0,confirmados:0,vendas_confirmadas:0};
+  if(!can(user,'contacts.view'))data.contacts={total:0,atacado:0,clientes:0};
+  if(!can(user,'products.view')&&!can(user,'inventory.view'))data.products={total:0,low:0,units:0};
+  if(!can(user,'deals.view'))data.deals=[];
+  if(!can(user,'tasks.view'))data.tasks={pending:0,overdue:0};
+  if(!can(user,'activity.view'))data.recent=[];
+  if(!can(user,'alerts.view'))data.alerts={unread:0};
+  return response(data);
+ }
  if(path.startsWith('/api/store/'))return storeRoute(req,env,user,path);
  if(path.startsWith('/api/invoices'))return invoiceRoute(req,env,user,path);
  if(path.startsWith('/api/contacts'))return contactsRoute(req,env,user,path);
  if(path==='/api/suppliers')return suppliersRoute(req,env,user);
  if(path.startsWith('/api/products'))return productsRoute(req,env,user,path);
  if(path==='/api/inventory'&&method==='GET')return inventoryRoute(req,env);
- if(/^\/api\/orders\/[a-f0-9-]+$/.test(path)&&method==='GET')return orderDetail(req,env,path.split('/').pop());
+ if(/^\/api\/orders\/[a-f0-9-]+$/.test(path)&&method==='GET')return orderDetail(req,env,path.split('/').pop(),user);
  if(path.startsWith('/api/orders'))return ordersRoute(req,env,user,path);
  if(path.startsWith('/api/deals'))return dealsRoute(req,env,user,path);
  if(path.startsWith('/api/tasks'))return tasksRoute(req,env,user,path);
@@ -474,7 +541,7 @@ async function api(req,env){
  if(path.startsWith('/api/alerts'))return alertsRoute(req,env,user,path);
  if(path==='/api/activities'&&method==='GET')return activitiesRoute(req,env);
  if(path==='/api/reports/financial'&&method==='GET')return reportsRoute(req,env,user);
- if(path==='/api/users')return usersRoute(req,env,user);
+ if(path.startsWith('/api/users'))return usersRoute(req,env,user,path);
  return fail('Rota não encontrada.',404);
 }
 export default {async fetch(req,env){
