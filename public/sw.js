@@ -1,9 +1,9 @@
 /* Macumbiinha CRM service worker.
    Network-first UI, cache-only fallback when offline; APIs are never cached. */
-const CACHE='macumbiinha-crm-shell-v5';
+const CACHE='macumbiinha-crm-shell-v6';
 const STATIC=[
   '/', '/app.css','/studio.css','/refined.css','/app.js','/interface.js',
-  '/commerce-console.js','/commerce-console.css','/experience.js','/finance-analytics.js','/icon.svg','/icon-192.png',
+  '/commerce-console.js','/commerce-console.css','/access-prompt.js','/access-prompt.css','/experience.js','/finance-analytics.js','/icon.svg','/icon-192.png',
   '/icon-512.png','/manifest.webmanifest'
 ];
 self.addEventListener('install',event=>{
