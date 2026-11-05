@@ -1,3 +1,4 @@
+# Fonte do catálogo: leleco2/macumbiinha-commerce (variações e galeria, revisão dc0d564e).
 name: Publicar loja Macumbiinha usando credencial do CRM
 on:
   workflow_dispatch:
