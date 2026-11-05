@@ -55,7 +55,7 @@ function productsTable(items,admin){
    '<td>'+tag(stock+' un.',stock<=p.min_quantity?'warning':'ok')+'</td>'+
    '<td>'+tag(pub?'Publicado':'Rascunho',pub?'ok':'')+'</td>'+
    '<td><div class="cm-row-actions"><button data-cm="edit" data-id="'+esc(p.id)+'">Editar</button>'+ (admin?'<button data-cm="variants" data-id="'+esc(p.id)+'">Variações ('+(p.variants?.length||0)+')</button><button data-cm="gallery" data-id="'+esc(p.id)+'">Fotos ('+(p.photos?.length||0)+')</button>':'') +
-   (admin?'<button data-cm="stock" data-id="'+esc(p.id)+'">Estoque</button><button data-cm="toggle" data-id="'+esc(p.id)+'">'+(pub?'Ocultar':'Publicar')+'</button>':'')+
+   (admin?''+(!p.variants?.length?'<button data-cm="stock" data-id="'+esc(p.id)+'">Estoque</button>':'')+'<button data-cm="toggle" data-id="'+esc(p.id)+'">'+(pub?'Ocultar':'Publicar')+'</button>':'')+
    '</div></td></tr>';
  }).join('')+'</tbody></table></div>';
 }
