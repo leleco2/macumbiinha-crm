@@ -51,11 +51,11 @@ export async function publicCatalog(req,env){
   const validRetail=activeVariants.map(v=>v.retail_cents).filter(n=>n>0);
   const validWholesale=activeVariants.map(v=>v.wholesale_cents).filter(n=>n>0);
   return{id:p.id,slug:p.slug,sku:p.sku,name:p.name,category:p.category,description:p.description,
-   image_url:group.gallery[0]||(p.has_image?new URL('/api/public/image/'+p.id,req.url).href:p.image_url),
+   image_url:group.gallery[0]||activeVariants.find(v=>v.gallery?.length)?.gallery?.[0]||(p.has_image?new URL('/api/public/image/'+p.id,req.url).href:p.image_url),
    gallery:group.gallery,tags,featured:!!p.featured,for_wholesale:!!p.for_wholesale,
-   retail_cents:activeVariants.length?(validRetail.length?Math.min(...validRetail):0):p.retail_cents,
-   wholesale_cents:activeVariants.length?(validWholesale.length?Math.min(...validWholesale):0):p.wholesale_cents,
-   available:activeVariants.length?sum>0:p.quantity>0,quantity:activeVariants.length?sum:p.quantity,
+   retail_cents:group.variants.length?(validRetail.length?Math.min(...validRetail):0):p.retail_cents,
+   wholesale_cents:group.variants.length?(validWholesale.length?Math.min(...validWholesale):0):p.wholesale_cents,
+   available:group.variants.length?sum>0:p.quantity>0,quantity:group.variants.length?sum:p.quantity,
    variants:activeVariants.map(v=>({id:v.id,sku:v.sku,label:v.label,quantity:v.quantity,available:v.available,
     retail_cents:v.retail_cents,wholesale_cents:v.wholesale_cents,image_url:v.image_url,gallery:v.gallery})),
    updated_at:p.updated_at};
