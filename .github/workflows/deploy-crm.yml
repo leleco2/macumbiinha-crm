@@ -71,11 +71,17 @@ jobs:
           BASE_URL: https://macumbiinha-crm.maodeouro-nexa.workers.dev
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error "$BASE_URL/api/health" | jq -e '.ok == true and .service == "Macumbiinha CRM"' >/dev/null; then
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if curl --fail --silent --show-error "$BASE_URL/api/health" | jq -e '.ok == true and .service == "Macumbiinha CRM"' >/dev/null \
+              && curl --fail --silent --show-error "$BASE_URL/" | grep -F "Macumbiinha — Gestão e Operação" >/dev/null \
+              && curl --fail --silent --show-error "$BASE_URL/app.js" | grep -F "const queryRoot=" >/dev/null \
+              && curl --fail --silent --show-error "$BASE_URL/refined.css" | grep -F "Design system v2" >/dev/null; then
               break
             fi
-            if [ "$attempt" = 5 ]; then exit 1; fi
+            if [ "$attempt" = 8 ]; then
+              echo "::error::CRM não atualizou os arquivos esperados na CDN da Cloudflare."
+              exit 1
+            fi
             sleep 8
           done
           curl --fail --silent --show-error "$BASE_URL/" | grep -F "Macumbiinha — Gestão e Operação"
