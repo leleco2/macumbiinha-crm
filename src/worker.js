@@ -337,15 +337,22 @@ async function alertsRoute(req,env,user,path){
 async function activitiesRoute(req,env){const data=await env.DB.prepare('SELECT a.*,c.name AS contact_name FROM activities a LEFT JOIN contacts c ON c.id=a.contact_id ORDER BY a.created_at DESC LIMIT 200').all();return response({items:data.results})}
 async function reportsRoute(req,env,user){
  if(user.role!=='admin')return fail('Relatórios financeiros restritos ao administrador.',403);
- const [months,margin,stock,receivables]=await Promise.all([
-  env.DB.prepare("SELECT substr(COALESCE(paid_at,created_at),1,7) AS month,COALESCE(SUM(CASE WHEN type='receita' THEN amount_cents ELSE 0 END),0) AS income_cents,COALESCE(SUM(CASE WHEN type='despesa' THEN amount_cents ELSE 0 END),0) AS expense_cents FROM financial_entries WHERE status='pago' AND substr(COALESCE(paid_at,created_at),1,7)>=strftime('%Y-%m','now','-5 months') GROUP BY month ORDER BY month").all(),
+ const requested=Number(new URL(req.url).searchParams.get('period'));
+ const period=[3,6,12].includes(requested)?requested:6;
+ const since=`-${period-1} months`;
+ const [months,expenses,margin,stock,receivables]=await Promise.all([
+  env.DB.prepare("SELECT substr(COALESCE(paid_at,created_at),1,7) AS month,COALESCE(SUM(CASE WHEN type='receita' THEN amount_cents ELSE 0 END),0) AS income_cents,COALESCE(SUM(CASE WHEN type='despesa' THEN amount_cents ELSE 0 END),0) AS expense_cents FROM financial_entries WHERE status='pago' AND substr(COALESCE(paid_at,created_at),1,7)>=strftime('%Y-%m','now',?) GROUP BY month ORDER BY month").bind(since).all(),
+  env.DB.prepare("SELECT COALESCE(NULLIF(TRIM(category),''),'Outros') AS category, SUM(amount_cents) AS amount_cents FROM financial_entries WHERE type='despesa' AND status='pago' AND substr(COALESCE(paid_at,created_at),1,7)>=strftime('%Y-%m','now',?) GROUP BY category ORDER BY amount_cents DESC").bind(since).all(),
   env.DB.prepare("SELECT COALESCE((SELECT SUM((i.unit_price_cents-i.unit_cost_cents)*i.quantity) FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.status IN ('confirmado','separando','enviado','concluido')),0) - COALESCE((SELECT SUM(discount_cents) FROM orders WHERE status IN ('confirmado','separando','enviado','concluido')),0) AS margin_cents").first(),
   env.DB.prepare('SELECT COALESCE(SUM(quantity*cost_cents),0) AS value_cents FROM products WHERE active=1').first(),
   env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN type='receita' THEN amount_cents ELSE 0 END),0) AS receivable,COALESCE(SUM(CASE WHEN type='despesa' THEN amount_cents ELSE 0 END),0) AS payable FROM financial_entries WHERE status='pendente'").first()
  ]);
- return response({months:months.results,margin_cents:margin.margin_cents||0,stock_value_cents:stock.value_cents||0,receivables});
-}
-async function usersRoute(req,env,user){
+ const allExpenses=expenses.results||[];
+ const expense_categories=allExpenses.length<=6?allExpenses:[...allExpenses.slice(0,5),{category:'Outras despesas',amount_cents:allExpenses.slice(5).reduce((a,x)=>a+Number(x.amount_cents||0),0)}];
+ const rows=months.results||[];
+ const period_balance_cents=rows.reduce((sum,row)=>sum+Number(row.income_cents||0)-Number(row.expense_cents||0),0);
+ return response({period,months:rows,expense_categories,period_balance_cents,margin_cents:margin.margin_cents||0,stock_value_cents:stock.value_cents||0,receivables});
+}async function usersRoute(req,env,user){
  if(user.role!=='admin')return fail('Sem permissão.',403);
  if(req.method==='GET'){const result=await env.DB.prepare('SELECT id,email,role,created_at FROM users ORDER BY created_at DESC').all();return response({items:result.results})}
  if(req.method==='POST'){

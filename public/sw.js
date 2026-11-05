@@ -1,7 +1,8 @@
-const CACHE='macumbiinha-crm-shell-v2';const STATIC=['/','/app.css','/app.js','/icon.svg','/icon-192.png','/manifest.webmanifest'];
+const CACHE='macumbiinha-crm-shell-v3';const STATIC=['/','/app.css','/studio.css','/app.js','/experience.js','/finance-analytics.js','/icon.svg','/icon-192.png','/manifest.webmanifest'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(STATIC)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==self.location.origin||u.pathname.startsWith('/api/'))return;e.respondWith(fetch(e.request).then(response=>{if(response.ok&&STATIC.includes(u.pathname)){const copy=response.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));}return response}).catch(()=>caches.match(e.request)))});
 self.addEventListener('push',e=>{let payload={title:'Macumbiinha CRM',body:'Uma atualização precisa da sua atenção.',url:'/'};try{if(e.data)payload={...payload,...e.data.json()}}catch{}e.waitUntil(self.registration.showNotification(payload.title,{body:payload.body,icon:'/icon-192.png',badge:'/icon-192.png',tag:payload.tag||'crm-alert',data:{url:payload.url||'/'}}))});
 self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(clients=>{const target=clients.find(c=>new URL(c.url).origin===self.location.origin);if(target){target.focus();return target.navigate(e.notification.data?.url||'/')}return self.clients.openWindow(e.notification.data?.url||'/')}))});
+
 /* Static asset metadata refresh. */

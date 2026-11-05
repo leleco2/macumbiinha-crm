@@ -141,3 +141,14 @@ Execute `npm run check` para validar JavaScript e testes antes de `npm run deplo
 - Implante backup, monitoramento, exportação de dados e política LGPD antes de migrar uma operação comercial real.
 - A aplicação não deve ser usada como único registro contábil ou fiscal.
 - Planeje testes de carga, recuperação de desastres, reversões e auditoria de acessos antes da operação com alto volume.
+
+
+## Melhorias de interface — Studio v2
+
+- Painel financeiro com gráficos de entradas e despesas pagas nos últimos 3, 6 ou 12 meses, saldo realizado e despesas por categoria. Todos os valores vêm do D1; sem dados o gráfico mostra zero. O financeiro continua restrito a administradores.
+- Tema claro/escuro acessível, com preferência salva no navegador e respeito ao tema do sistema.
+- Convite dispensável de instalação PWA em telas móveis. Android compatível usa o prompt nativo; iPhone mostra o caminho Safari > Compartilhar > Adicionar à Tela de Início. Notificações push continuam dependentes de permissão e VAPID.
+- Estilos premium responsivos em `public/studio.css`, sem dependências externas; exportação CSV dos lançamentos carregados; tabela acessível dos dados do gráfico.
+- Testes: `npm run check`. Smoke visual manual: `python tests/visual_studio_smoke.py` (necessita Playwright com Chromium instalado).
+
+Publicação: o código pode ser enviado ao GitHub sem secrets. O deploy do Cloudflare Worker precisa ser verificado separadamente; não confunda commit com publicação.
