@@ -24,7 +24,10 @@ const server=http.createServer(async(req,res)=>{
    const key=url.pathname.slice(5);
    requests.push({method:req.method,key});
    res.setHeader('content-type','application/json');
-   res.end(JSON.stringify(payload[key]||{ok:true,id:'new-id'}));
+   if(key==='auth/me' && (req.headers.cookie||'').includes('mock-login=1')){
+     res.statusCode=401;res.end(JSON.stringify({error:'Faça login'}));return;
+   }
+   res.end(JSON.stringify(payload[key]||{needs_setup:false,ok:true,id:'new-id'}));
    return;
  }
  const rel=url.pathname==='/'?'index.html':decodeURIComponent(url.pathname.slice(1));
@@ -74,26 +77,52 @@ try{
    console.log('contacts actions '+JSON.stringify(await page.locator('button[data-action]').evaluateAll(nodes=>nodes.map(n=>n.dataset.action))));
    await page.locator('button[data-action="contact-new"]').first().click({timeout:8000});
    await page.locator('#modal-layer .modal').waitFor();
-   await page.locator('[data-action="modal-close"]').first().click();
+   await page.locator('#entry-form [name="name"]').fill('Contato validado');
+   await page.locator('#entry-form button[type="submit"]').click();
+   await page.locator('#modal-layer .modal').waitFor({state:'hidden'});
+   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='contacts'),'Contact creation should submit to API');
    await page.locator('#modal-layer .modal').waitFor({state:'hidden'});
    await page.locator('.nav-item[data-nav="products"]').click();
    await page.waitForFunction(()=>document.querySelector('#workspace h1')?.textContent?.trim()==='Produtos e estoque');
    await page.locator('button[data-action="product-new"]').first().click({timeout:8000});
    await page.locator('#modal-layer .modal').waitFor();
-   await page.locator('[data-action="modal-close"]').first().click();
+   await page.locator('#entry-form [name="name"]').fill('Produto validado');
+   await page.locator('#entry-form [name="sku"]').fill('VALIDADO-01');
+   await page.locator('#entry-form button[type="submit"]').click();
+   await page.locator('#modal-layer .modal').waitFor({state:'hidden'});
+   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='products'),'Product creation should submit to API');
    await page.locator('[data-command-open]').click();
    await page.locator('#cmd-input').fill('financeiro');
    await page.locator('.cmd-row').first().click();
    assert.match(await page.locator('#breadcrumb').innerText(),/Financeiro/);
+   await page.locator('button[data-action="finance-new"]').first().click();
+   await page.locator('#entry-form [name="title"]').fill('Financeiro validado');
+   await page.locator('#entry-form [name="amount_real"]').fill('189,90');
+   await page.locator('#entry-form button[type="submit"]').click();
+   await page.locator('#modal-layer .modal').waitFor({state:'hidden'});
+   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='finance'),'Finance creation should submit to API');
    await page.locator('[data-experience="theme"]').first().click();
    assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'dark');
    await page.locator('.quick-create').click();
    await page.locator('#modal-layer .modal').waitFor();
-   await page.locator('[data-action="modal-close"]').first().click();
+   await page.locator('#order-form button[type="submit"]').click();
+   await page.locator('#modal-layer .modal').waitFor({state:'hidden'});
+   assert.ok(requests.some(r=>r.method==='POST'&&r.key==='orders'),'Order creation should submit to API');
   }
   assert.deepEqual(errors,[],v.name+' browser errors');
   console.log(v.name+': 9 menus, form actions, theme, command palette, quick-create passed; API calls '+requests.length);
   await context.close();
  }
+ const loginContext=await browser.newContext({serviceWorkers:'block'});
+ await loginContext.addCookies([{name:'mock-login',value:'1',url:addr}]);
+ const loginPage=await loginContext.newPage();
+ await loginPage.goto(addr,{waitUntil:'domcontentloaded'});
+ await loginPage.locator('#login-form').waitFor({timeout:12000});
+ await loginPage.locator('#login-form [name=email]').fill('teste@example.org');
+ await loginPage.locator('#login-form [name=password]').fill('senha-de-teste');
+ await loginPage.locator('#login-form button[type=submit]').click();
+ await loginPage.locator('.page-heading').waitFor({timeout:12000});
+ console.log('login submitted and returned to dashboard');
+ await loginContext.close();
 }catch(e){console.error(e);process.exitCode=1}
 finally{await browser?.close();await new Promise(done=>server.close(done))}
