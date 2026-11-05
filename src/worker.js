@@ -16,7 +16,7 @@ function hex(bytes){return Array.from(bytes,n=>n.toString(16).padStart(2,'0')).j
 async function sha(value){return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(value))))}
 async function passwordHash(password,salt){
  const key=await crypto.subtle.importKey('raw',encoder.encode(password),'PBKDF2',false,['deriveBits']);
- const hash=await crypto.subtle.deriveBits({name:'PBKDF2',salt:Uint8Array.from(salt.match(/.{2}/g),x=>parseInt(x,16)),hash:'SHA-256',iterations:180000},key,256);
+ const hash=await crypto.subtle.deriveBits({name:'PBKDF2',salt:Uint8Array.from(salt.match(/.{2}/g),x=>parseInt(x,16)),hash:'SHA-256',iterations:100000},key,256);
  return hex(new Uint8Array(hash));
 }
 function constantEquals(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let result=0;for(let i=0;i<a.length;i++)result|=a.charCodeAt(i)^b.charCodeAt(i);return result===0}
