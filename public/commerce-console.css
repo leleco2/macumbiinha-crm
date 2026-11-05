@@ -58,3 +58,19 @@ html[data-theme=dark] .cm-close{background:#273d2e}
 @media(max-width:950px){.cm-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-panel .table-scroll{overflow-x:auto}}
 @media(max-width:650px){.cm-stats{gap:8px}.cm-stats article{padding:15px}.cm-stats article strong{font-size:25px}.cm-help{align-items:flex-start;flex-direction:column;padding:17px;gap:8px}.cm-toolbar{padding:12px;align-items:stretch;flex-wrap:wrap}.cm-search{flex:1 1 100%}.cm-toolbar .btn{align-self:flex-end}.cm-form-grid,.cm-check-grid{grid-template-columns:1fr}.cm-modal-head,.cm-form-body,.cm-form-foot{padding-left:17px;padding-right:17px}.cm-modal-head h2{font-size:20px}}
 @media(prefers-reduced-motion:reduce){.cm-modal-backdrop{backdrop-filter:none}}
+
+
+/* Nested variants and visual gallery in the administration */
+.cm-variant-list{display:grid;gap:9px}
+.cm-variant-row{border:1px solid var(--border-soft,#dae4d8);border-radius:10px;padding:14px;background:var(--surface-alt,#f8fbf8);display:flex;justify-content:space-between;gap:14px;align-items:center}
+.cm-variant-row strong{display:block;font-size:13px;color:var(--text-main,#284232)}
+.cm-variant-row small{display:block;font-size:11px;color:var(--text-muted,#738175);margin-top:4px;line-height:1.5}
+.cm-add-variant{justify-self:start;margin-top:4px}
+.cm-gallery-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cm-gallery-tile{border:1px solid var(--border-soft,#dae4d8);border-radius:11px;overflow:hidden;background:var(--surface-alt,#f7faf6)}
+.cm-gallery-tile img{display:block;width:100%;height:128px;object-fit:cover;background:#eef2eb}
+.cm-gallery-tile>div{padding:10px;display:grid;gap:7px}
+.cm-gallery-tile small{font-size:10px;word-break:break-word;color:var(--text-muted,#687d6b)}
+.cm-gallery-tile button{min-height:29px;padding:6px 9px;border:1px solid var(--border-soft,#d3dfd1);border-radius:7px;background:var(--surface,#fff);font-size:11px;color:var(--text-main,#315139);font-weight:680;text-align:left;cursor:pointer}
+.cm-gallery-tile button:disabled{cursor:default;opacity:.5}
+@media(max-width:650px){.cm-gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-variant-row{align-items:flex-start;flex-direction:column}.cm-row-actions{flex-wrap:wrap}.cm-gallery-tile img{height:112px}}
