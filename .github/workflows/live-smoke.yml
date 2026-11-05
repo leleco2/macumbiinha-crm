@@ -17,7 +17,7 @@ jobs:
           BASE_URL: https://macumbiinha-crm.maodeouro-nexa.workers.dev
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error "$BASE_URL/" | grep -F "Macumbiinha | CRM & ERP"
+          curl --fail --silent --show-error "$BASE_URL/" | grep -F "Macumbiinha — Gestão e Operação"
           curl --fail --silent --show-error "$BASE_URL/api/health" | jq -e '.ok == true and .service == "Macumbiinha CRM"'
           curl --fail --silent --show-error "$BASE_URL/api/setup/status" | jq -e '.needs_setup | type == "boolean"'
           curl --fail --silent --show-error "$BASE_URL/api/public/config" | jq -e '(.site_key | type == "string") and (.form_enabled | type == "boolean")'
