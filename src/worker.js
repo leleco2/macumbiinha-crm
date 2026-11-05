@@ -518,7 +518,13 @@ async function api(req,env){
    data.finance={received:0,spent:0,receivable:0,payable:0};
    if(data.orders)data.orders.vendas_confirmadas=0;
   }
+  if(!can(user,'orders.view'))data.orders={total:0,novos:0,confirmados:0,vendas_confirmadas:0};
+  if(!can(user,'contacts.view'))data.contacts={total:0,atacado:0,clientes:0};
+  if(!can(user,'products.view')&&!can(user,'inventory.view'))data.products={total:0,low:0,units:0};
   if(!can(user,'deals.view'))data.deals=[];
+  if(!can(user,'tasks.view'))data.tasks={pending:0,overdue:0};
+  if(!can(user,'activity.view'))data.recent=[];
+  if(!can(user,'alerts.view'))data.alerts={unread:0};
   return response(data);
  }
  if(path.startsWith('/api/store/'))return storeRoute(req,env,user,path);
