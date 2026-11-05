@@ -1,0 +1,25 @@
+name: Smoke test CRM publicado
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aguardar propagação curta
+        run: sleep 8
+      - name: Validar painel e APIs públicas
+        env:
+          BASE_URL: https://macumbiinha-crm.maodeouro-nexa.workers.dev
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "$BASE_URL/" | grep -F "Macumbiinha | CRM & ERP"
+          curl --fail --silent --show-error "$BASE_URL/api/health" | jq -e '.ok == true and .service == "Macumbiinha CRM"'
+          curl --fail --silent --show-error "$BASE_URL/api/setup/status" | jq -e '.needs_setup == true'
+          curl --fail --silent --show-error "$BASE_URL/api/public/config" | jq -e '.site_key == "0x4AAAAAAF1Fas3oPq62j5rH" and .form_enabled == false'
+          curl --fail --silent --show-error "$BASE_URL/api/public/catalog" | jq -e '.items | type == "array" and length == 0'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$BASE_URL/api/dashboard")" = "401"
