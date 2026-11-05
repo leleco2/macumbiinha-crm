@@ -57,7 +57,12 @@ try{
   for(const section of sections){
    if(v.name==='mobile')await page.locator('#menu-toggle').click();
    await page.locator('.nav-item[data-nav="'+section+'"]').click();
-   await page.waitForFunction(name=>document.querySelector('#workspace h1')?.textContent?.trim()===name,names[section],{timeout:11000});
+   try{
+     await page.waitForFunction(name=>document.querySelector('#workspace h1')?.textContent?.trim()===name,names[section],{timeout:3500});
+   }catch(err){
+     console.error('FAILED SECTION',v.name,section,'breadcrumb:',await page.locator('#breadcrumb').innerText(),'content:',(await page.locator('#workspace').innerText()).slice(0,800),'errors:',errors,'requests:',requests.slice(-8));
+     throw err;
+   }
    console.log(v.name+' navigation '+section+': '+(await page.locator('#workspace h1').innerText()));
    const snapshot=(await page.locator('#workspace').innerText()).slice(0,350);
    assert.ok(!snapshot.includes('Erro ao carregar'),'Section '+section+' failed: '+snapshot);
