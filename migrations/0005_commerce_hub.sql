@@ -154,3 +154,12 @@ INSERT OR IGNORE INTO catalog_listings(product_id,slug,published,featured,for_wh
  SELECT id,'slick-silicone',1,0,1,'["Silicone","Container"]' FROM products WHERE sku='SLICK-SILICONE';
 INSERT OR IGNORE INTO catalog_listings(product_id,slug,published,featured,for_wholesale,tags_json)
  SELECT id,'bolador',1,0,0,'["Prático","Utilidade"]' FROM products WHERE sku='BOLADOR';
+
+-- New products added through the older Produtos e estoque area are also
+-- registered as unpublished storefront drafts, without showing unverified prices.
+CREATE TRIGGER IF NOT EXISTS products_create_catalog_draft
+AFTER INSERT ON products
+BEGIN
+ INSERT OR IGNORE INTO catalog_listings(product_id,slug,published)
+ VALUES(NEW.id,lower(NEW.sku),0);
+END;
