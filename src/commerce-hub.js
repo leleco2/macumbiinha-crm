@@ -96,7 +96,7 @@ async function catalogAdmin(req,env,user){
  }
  if(req.method!=='POST')return fail('Método não permitido.',405);
  if(!admin(user,'store.manage'))return fail('Sem permissão para cadastrar produtos.',403);
- const body=await req.json(),p=productFields(body),l=listing(body,p.sku),id=uid();
+ const body=await req.json(),p=productFields({...body,cost_cents:can(user,'finance.view')?body.cost_cents:0}),l=listing(body,p.sku),id=uid();
  const statements=[
   env.DB.prepare('INSERT INTO products(id,sku,name,category,description,cost_cents,retail_cents,wholesale_cents,quantity,min_quantity,supplier_id,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
    .bind(id,p.sku,p.name,p.category,p.description,p.cost_cents,p.retail_cents,p.wholesale_cents,p.quantity,p.min_quantity,p.supplier_id,p.active),
@@ -110,7 +110,7 @@ async function editProduct(req,env,user,id){
  if(!admin(user,'store.manage'))return fail('Sem permissão para editar produtos.',403);
  if(req.method!=='PATCH')return fail('Método não permitido.',405);
  const old=await env.DB.prepare('SELECT * FROM products WHERE id=?').bind(id).first();if(!old)return fail('Produto não encontrado.',404);
- const body=await req.json(),p=productFields({...old,...body,quantity:old.quantity}),l=listing(body,p.sku);
+ const body=await req.json(),p=productFields({...old,...body,quantity:old.quantity,cost_cents:can(user,'finance.view')?(body.cost_cents??old.cost_cents):old.cost_cents}),l=listing(body,p.sku);
  const statements=[
   env.DB.prepare("UPDATE products SET sku=?,name=?,category=?,description=?,cost_cents=?,retail_cents=?,wholesale_cents=?,min_quantity=?,supplier_id=?,active=?,updated_at=datetime('now') WHERE id=?")
    .bind(p.sku,p.name,p.category,p.description,p.cost_cents,p.retail_cents,p.wholesale_cents,p.min_quantity,p.supplier_id,p.active,id),
