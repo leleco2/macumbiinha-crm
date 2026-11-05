@@ -65,7 +65,7 @@ function roleOptions(chosen){
  return roles.map(r=>'<option value="'+escape(r.key)+'"'+(chosen===r.key?' selected':'')+'>'+escape(r.label)+'</option>').join('');
 }
 function permissionControls(selected,role){
- const allowed=role==='administrador'?null:selected;
+ const allowed=role==='administrador'?Object.keys(permissionLabels):selected;
  return zones.map(([group,keys])=>'<fieldset class="team-permission-group"><legend>'+escape(group)+'</legend><div class="team-permissions">'+keys.map(key=>'<label class="team-permission"><input type="checkbox" name="permission" value="'+escape(key)+'"'+((allowed||[]).includes(key)?' checked':'')+(key==='users.manage'&&role!=='administrador'?' disabled':'')+'><span>'+escape(permissionLabels[key])+'</span></label>').join('')+'</div></fieldset>').join('');
 }
 function roleDefaults(role){return [...(roles.find(r=>r.key===role)?.permissions||[])]}
