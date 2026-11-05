@@ -12,6 +12,7 @@ async function api(path,method='GET',body){
  const res=await fetch('/api/'+path,{method,credentials:'same-origin',cache:'no-store',headers:{...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body===undefined?undefined:JSON.stringify(body)});
  let data;try{data=await res.json()}catch{throw new Error('Resposta inválida da API.')}if(!res.ok){if(res.status===401&&state.user){state.user=null;renderLogin()}throw new Error(data.error||'Erro na operação.')}return data;
 }
+/* Static asset metadata refresh. */
 function toast(message,type='success'){const t=$('#toast');t.textContent=message;t.className=type==='error'?'toast-error':'toast-ok';t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),3700)}
 const badge=(label,tone='neutral')=>`<span class="status status-${esc(tone)}">${esc(label)}</span>`;
 const empty=(title,description)=>`<div class="empty-state"><div class="empty-glyph">◌</div><h3>${esc(title)}</h3><p>${esc(description)}</p></div>`;
