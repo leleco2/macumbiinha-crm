@@ -1,0 +1,28 @@
+name: Navegação funcional — Chromium
+on:
+  push:
+    branches: [design/operational-studio-20261105]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test driver
+        run: npm install --no-audit --no-fund --no-save playwright-core
+      - name: Verify available browser
+        run: |
+          which google-chrome || which chromium || true
+          google-chrome --version || true
+      - name: Exercise CRM screens and actions
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node tests/browser-functional.mjs
