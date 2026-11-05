@@ -79,6 +79,7 @@ function build(){
 }
 export function showAccessPrompt(isAuthenticated=false){
  authenticated=Boolean(isAuthenticated);
+ document.body.dataset.crmAccessStage=authenticated?'dashboard':'login';
  if(dismissed()){remove();return}
  clearTimeout(inviteTimer);
  if(document.getElementById('crm-access-prompt')){render();return}
