@@ -9,13 +9,7 @@
     "db:migrate:local": "npx wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "npx wrangler d1 migrations apply DB --remote",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check src/worker.js && node --check public/app.js && node --check public/interface.js && node --check public/experience.js && node --check public/sw.js && npm test",
-    "build:icons": "node scripts/build-icons.mjs",
-    "predev": "npm run build:icons",
-    "predeploy": "npm run build:icons"
+    "check": "node --check src/worker.js && node --check public/app.js && node --check public/sw.js && npm test"
   },
-  "devDependencies": {
-    "wrangler": "^4.0.0",
-    "sharp": "^0.34.2"
-  }
+  "devDependencies": {"wrangler": "^4.0.0"}
 }

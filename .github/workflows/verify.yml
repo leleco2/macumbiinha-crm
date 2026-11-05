@@ -18,8 +18,6 @@ jobs:
           node-version: "22"
       - name: Instalar dependências
         run: npm install --no-audit --no-fund
-      - name: Gerar ícones para validação
-        run: npm run build:icons
       - name: Verificar JavaScript e testes Node
         run: npm run check
       - name: Testar regras SQLite

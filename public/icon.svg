@@ -1,6 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-label="Macumbiinha">
-  <title>Macumbiinha</title>
-  <rect width="192" height="192" rx="44" fill="#D6EAB5"/>
-  <path d="M42 130V75c0-11 10-15 18-7l23 28 24-29c7-8 17-4 17 7v56" fill="none" stroke="#18392A" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="151" cy="121" r="11" fill="#18392A"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#12261b"/><circle cx="141" cy="49" r="13" fill="#cdf69e"/><text x="35" y="131" fill="#f2f3e8" font-family="Arial,sans-serif" font-weight="900" font-size="100" letter-spacing="-14">m.</text><!-- Static asset metadata refresh. --></svg>
