@@ -1,0 +1,25 @@
+name: Validar Macumbiinha CRM
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+      - name: Verificar JavaScript e testes Node
+        run: npm run check
+      - name: Testar regras SQLite
+        run: python3 -m unittest tests/test_database.py
