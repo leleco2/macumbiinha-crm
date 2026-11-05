@@ -152,3 +152,12 @@ Execute `npm run check` para validar JavaScript e testes antes de `npm run deplo
 - Testes: `npm run check`. Smoke visual manual: `python tests/visual_studio_smoke.py` (necessita Playwright com Chromium instalado).
 
 Publicação: o código pode ser enviado ao GitHub sem secrets. O deploy do Cloudflare Worker precisa ser verificado separadamente; não confunda commit com publicação.
+
+
+## Variações e fotos pela central de produtos
+
+Em **Loja online → Variações**, um produto principal (por exemplo, uma seda) pode receber até 30 opções como King Size, Slim, cor ou edição. Cada opção recebe **SKU único**, custo, preço de varejo, preço de atacado, estoque inicial e limite mínimo. As opções aparecem juntas na mesma página da loja; a seleção envia o SKU exato da opção e o ERP usa esse SKU nas baixas automáticas por pedido confirmado. O estoque do produto principal não substitui o das variações.
+
+Em **Loja online → Fotos**, faça upload de até 8 imagens JPG, PNG ou WEBP por produto/variação, reorganizando a capa e removendo fotos individuais. O formulário de produto também aceita várias fotos. Fotos grandes são redimensionadas no navegador para WebP de no máximo 850 KB cada. Imagens de produtos não publicados só podem ser pré-visualizadas por usuários autenticados do CRM. A API pública só serve as fotos quando o produto principal está publicado e ativo.
+
+A migração aditiva é `migrations/0006_variants_gallery.sql` e mantém as notas, pedidos, contatos e imagens anteriores. Não se trata de geração automática de produtos novos a partir de fotos; nome, preço e estoque devem ser cadastrados no CRM.
