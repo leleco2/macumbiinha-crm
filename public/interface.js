@@ -12,6 +12,7 @@ const COMMANDS=[
  {section:'tasks',label:'Tarefas',terms:'pendencias fazer',group:'Navegação'},
  {section:'suppliers',label:'Fornecedores',terms:'compras parceiros',group:'Navegação'},
  {section:'activity',label:'Histórico',terms:'atividade auditoria',group:'Navegação'},
+ {section:'users',label:'Usuários e permissões',terms:'equipe colaboradores cargos bloquear senha',group:'Navegação'},
  {section:'settings',label:'Configurações',terms:'conta perfil senha',group:'Navegação'},
  {action:'order-new',label:'Criar pedido',terms:'novo pedido venda',group:'Ações rápidas'},
  {action:'contact-new',label:'Cadastrar contato',terms:'novo cliente lead',group:'Ações rápidas'},
@@ -27,7 +28,8 @@ let lastFocused=null;
 const normalize=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
 function authenticated(){return Boolean(document.querySelector('.shell #workspace'))}
 function accessible(command){
- if(command.admin&&!document.querySelector('[data-nav="finance"]'))return false;
+ if(command.section&&!document.querySelector('[data-nav="'+command.section+'"]'))return false;
+ if(command.action){const section={"order-new":"orders","contact-new":"contacts","task-new":"tasks","finance-new":"finance"}[command.action];if(section&&!document.querySelector('[data-nav="'+section+'"]'))return false;}
  return true;
 }
 function dismiss(){
