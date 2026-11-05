@@ -1,5 +1,7 @@
 /** Progressive UI enhancements; no third-party dependencies and no tracking. */
 const THEME_KEY='macumbiinha_crm_theme';
+const SVG_SUN="<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42\"/></svg>";
+const SVG_MOON="<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M20.5 14.3A8.6 8.6 0 0 1 9.7 3.5 8.8 8.8 0 1 0 20.5 14.3Z\"/></svg>";
 const INSTALL_DISMISSED_KEY='macumbiinha_install_dismissed';
 const WEEK=7*24*60*60*1000;
 let deferredInstall=null;
@@ -11,7 +13,7 @@ const safeStorage={
 };
 const getSystemTheme=()=>typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 export function getTheme(){const selected=safeStorage.get(THEME_KEY);return selected==='dark'||selected==='light'?selected:getSystemTheme()}
-function syncThemeButtons(){const dark=document.documentElement.dataset.theme==='dark';document.querySelectorAll('[data-experience="theme"]').forEach(button=>{button.setAttribute('aria-label',dark?'Ativar tema claro':'Ativar tema escuro');button.setAttribute('aria-pressed',String(dark));const label=button.querySelector('[data-theme-label]');if(label)label.textContent=dark?'Tema claro':'Tema escuro';const icon=button.querySelector('[data-theme-icon]');if(icon)icon.textContent=dark?'☀':'☾';});}
+function syncThemeButtons(){const dark=document.documentElement.dataset.theme==='dark';document.querySelectorAll('[data-experience="theme"]').forEach(button=>{button.setAttribute('aria-label',dark?'Ativar tema claro':'Ativar tema escuro');button.setAttribute('aria-pressed',String(dark));const label=button.querySelector('[data-theme-label]');if(label)label.textContent=dark?'Tema claro':'Tema escuro';const icon=button.querySelector('[data-theme-icon]');if(icon)icon.innerHTML=dark?SVG_SUN:SVG_MOON;});}
 export function setTheme(value){const theme=value==='dark'?'dark':'light';document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme;safeStorage.set(THEME_KEY,theme);syncThemeButtons();return theme}
 const standalone=()=>matchMedia('(display-mode: standalone)').matches||Boolean(navigator.standalone);
 const mobile=()=>matchMedia('(max-width: 740px)').matches||/Android|iPad|iPhone|iPod/i.test(navigator.userAgent);
@@ -23,11 +25,11 @@ function buildBanner(){
  if(!isAuthenticated||standalone()||dismissedRecently()||!mobile())return;
  if(document.getElementById('crm-install-banner'))return;
  const banner=document.createElement('aside');banner.id='crm-install-banner';banner.className='crm-install-banner';banner.setAttribute('role','region');banner.setAttribute('aria-label','Instalar CRM no celular');
- banner.innerHTML=`<div class="install-app-icon" aria-hidden="true">m.</div><div class="install-app-text"><span class="install-app-kicker">MACUMBIINHA · NO SEU CELULAR</span><strong>Seu CRM, sempre à mão.</strong><p>Acesse pedidos, estoque, vendas e alertas diretamente da tela inicial.</p></div><div class="install-app-controls"><button class="install-app-cta" type="button" data-experience="install">${deferredInstall?'Instalar agora':'Como instalar'} <span aria-hidden="true">↗</span></button></div><button type="button" class="install-app-dismiss" data-experience="dismiss" aria-label="Fechar convite de instalação">×</button>`;
+ banner.innerHTML=`<div class="install-app-icon" aria-hidden="true"><img src="/icon.svg" alt=""></div><div class="install-app-text"><span class="install-app-kicker">MACUMBIINHA · NO SEU CELULAR</span><strong>Seu CRM, sempre à mão.</strong><p>Acesse pedidos, estoque, vendas e alertas diretamente da tela inicial.</p></div><div class="install-app-controls"><button class="install-app-cta" type="button" data-experience="install">${deferredInstall?'Instalar agora':'Como instalar'} <span aria-hidden="true">↗</span></button></div><button type="button" class="install-app-dismiss" data-experience="dismiss" aria-label="Fechar convite de instalação">×</button>`;
  document.body.appendChild(banner);
  requestAnimationFrame(()=>banner.classList.add('is-visible'));
 }
-export function refreshExperience(authenticated=false){isAuthenticated=Boolean(authenticated);syncThemeButtons();document.querySelector('.crm-login-theme-toggle')?.remove();if(!isAuthenticated){hideBanner();const button=document.createElement('button');button.type='button';button.className='crm-login-theme-toggle';button.dataset.experience='theme';button.innerHTML='<span data-theme-icon>☾</span><span data-theme-label>Tema escuro</span>';document.body.append(button);syncThemeButtons();return;}
+export function refreshExperience(authenticated=false){isAuthenticated=Boolean(authenticated);syncThemeButtons();document.querySelector('.crm-login-theme-toggle')?.remove();if(!isAuthenticated){hideBanner();const button=document.createElement('button');button.type='button';button.className='crm-login-theme-toggle';button.dataset.experience='theme';button.innerHTML='<span data-theme-icon></span><span data-theme-label>Tema escuro</span>';document.body.append(button);syncThemeButtons();return;}
  const installButton=document.getElementById('install-btn');if(installButton)installButton.hidden=standalone()||(!mobile()&&!deferredInstall);
  if(!standalone())setTimeout(()=>{if(isAuthenticated)buildBanner()},1200);
 }
