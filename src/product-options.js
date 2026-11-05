@@ -1,11 +1,12 @@
 /* Variant inventory and photo galleries for Macumbiinha.
    Each variant is a real SKU in products so ERP order triggers debit the correct stock. */
 import {productFields,clean,integer} from './validators.js';
+import {can,redactProduct} from './access-control.js';
 
 const out=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}});
 const error=(message,status=400)=>out({error:message},status);
 const id=()=>crypto.randomUUID();
-const isAdmin=user=>user?.role==='admin';
+const isAdmin=(user,permission)=>can(user,permission);
 const validId=s=>/^[a-f0-9-]{36}$/.test(s);
 const mimeOf=(name,b)=>{
  const ext=String(name).toLowerCase();
@@ -48,9 +49,9 @@ export async function variantRoute(req,env,user,path){
  if(!parent)return error('Produto principal não encontrado.',404);
  if(!variantId&&req.method==='GET'){
   const result=await env.DB.prepare('SELECT p.*,v.label,v.position FROM product_variants v JOIN products p ON p.id=v.variant_product_id WHERE v.parent_product_id=? ORDER BY v.position,v.label LIMIT 50').bind(parentId).all();
-  return out({items:result.results});
+  return out({items:result.results.map(v=>redactProduct(v,can(user,'finance.view')))});
  }
- if(!isAdmin(user))return error('Somente administradores podem alterar variações.',403);
+ if(!isAdmin(user,path.endsWith('/stock')?'inventory.adjust':'store.manage'))return error('Sem permissão para alterar variações.',403);
  if(!variantId&&req.method==='POST'){
   const count=await env.DB.prepare('SELECT count(*) total FROM product_variants WHERE parent_product_id=?').bind(parentId).first();
   if(count?.total>=30)return error('Limite de 30 variações por produto.',409);
@@ -99,7 +100,7 @@ export async function galleryRoute(req,env,user,path){
   const records=await env.DB.prepare('SELECT id,file_name,mime_type,file_size,sort_order,created_at FROM product_gallery WHERE product_id=? ORDER BY sort_order,created_at').bind(productId).all();
   return out({items:records.results});
  }
- if(!isAdmin(user))return error('Somente administradores podem enviar fotos.',403);
+ if(!isAdmin(user,'store.photos'))return error('Sem permissão para enviar fotos.',403);
  if(imageId&&req.method==='GET'&&match[3]==='view'){
   const row=await env.DB.prepare('SELECT mime_type,body FROM product_gallery WHERE id=? AND product_id=?').bind(imageId,productId).first();
   if(!row)return error('Imagem não encontrada.',404);
