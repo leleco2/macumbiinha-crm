@@ -55,7 +55,8 @@ export async function variantRoute(req,env,user,path){
  if(!variantId&&req.method==='POST'){
   const count=await env.DB.prepare('SELECT count(*) total FROM product_variants WHERE parent_product_id=?').bind(parentId).first();
   if(count?.total>=30)return error('Limite de 30 variações por produto.',409);
-  const data=variationInput(await req.json(),parent);
+  const input=await req.json();if(!can(user,'finance.view'))input.cost_cents=0;
+  const data=variationInput(input,parent);
   if(data.error)return error(data.error);
   const vid=id(),p=data.fields;
   const batch=[
@@ -78,7 +79,8 @@ export async function variantRoute(req,env,user,path){
   await audit(env,user,'variant_stock',variantId);return out({ok:true});
  }
  if(req.method==='PATCH'&&path.endsWith('/'+variantId)){
-  const data=variationInput(await req.json(),parent,current);
+  const input=await req.json();if(!can(user,'finance.view'))input.cost_cents=current.cost_cents;
+  const data=variationInput(input,parent,current);
   if(data.error)return error(data.error);
   const p=data.fields;
   await env.DB.batch([
