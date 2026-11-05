@@ -1,13 +1,19 @@
 {
   "id": "/",
-  "name": "Macumbiinha CRM & ERP",
+  "name": "Macumbiinha | Gestão e Operação",
   "short_name": "Macumbiinha CRM",
+  "description": "Gestão de pedidos, clientes, estoque e financeiro da Macumbiinha.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#101f19",
-  "theme_color": "#101f19",
+  "orientation": "any",
+  "background_color": "#F5F6F3",
+  "theme_color": "#173327",
   "lang": "pt-BR",
-  "asset_version": 3,
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
