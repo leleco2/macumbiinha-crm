@@ -1,5 +1,6 @@
 import {STAGES,SEGMENTS,CONTACT_STATUSES,ORIGINS,ORDER_STATUSES,PAYMENTS,FINANCE_STATUSES,FINANCE_TYPES,integer,clean,choice,emailOk,phoneOk,contactFields,productFields,dealFields,taskFields,financeFields,orderStatusAllowed} from './validators.js';
 import {dispatchPush,validateSubscription} from './push.js';
+import {publicCatalog,publicSite,publicImage,storeRoute,invoiceRoute} from './commerce-hub.js';
 
 const encoder=new TextEncoder(),SESSION_SECONDS=8*60*60;
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'};
@@ -427,13 +428,9 @@ async function api(req,env){
   if(env.SITE_ORIGIN&&origin===env.SITE_ORIGIN)headers['Access-Control-Allow-Origin']=env.SITE_ORIGIN;
   return response({form_enabled:!!(env.SITE_ORIGIN&&env.TURNSTILE_SECRET&&env.TURNSTILE_SITE_KEY&&env.FORM_SALT),site_key:env.TURNSTILE_SITE_KEY||'',version:'1.1.0'},200,headers);
  }
- if(path==='/api/public/catalog'&&method==='GET'){
-  const rows=await env.DB.prepare('SELECT sku,name,category,retail_cents,quantity FROM products WHERE active=1 AND retail_cents>0 ORDER BY name LIMIT 1500').all();
-  const origin=req.headers.get('Origin');
-  const headers={'Cache-Control':'no-store','Vary':'Origin'};
-  if(env.SITE_ORIGIN&&origin===env.SITE_ORIGIN)headers['Access-Control-Allow-Origin']=env.SITE_ORIGIN;
-  return response({items:rows.results.map(p=>({sku:p.sku,name:p.name,category:p.category,retail_cents:p.retail_cents,available:p.quantity>0,quantity:p.quantity}))},200,headers);
- }
+ if(path==='/api/public/catalog'&&method==='GET')return publicCatalog(req,env);
+ if(path==='/api/public/site'&&method==='GET')return publicSite(req,env);
+ if(path.startsWith('/api/public/image/'))return publicImage(req,env,path);
  if(path==='/api/setup/status'&&method==='GET'){const users=await env.DB.prepare('SELECT COUNT(*) AS total FROM users').first();return response({needs_setup:users.total===0})}
  if(path==='/api/setup'&&method==='POST')return setup(req,env);
  if(path==='/api/auth/login'&&method==='POST')return login(req,env);
@@ -461,6 +458,8 @@ async function api(req,env){
   return response({ok:true});
  }
  if(path==='/api/dashboard'&&method==='GET')return response(await dashboard(env));
+ if(path.startsWith('/api/store/'))return storeRoute(req,env,user,path);
+ if(path.startsWith('/api/invoices'))return invoiceRoute(req,env,user,path);
  if(path.startsWith('/api/contacts'))return contactsRoute(req,env,user,path);
  if(path==='/api/suppliers')return suppliersRoute(req,env,user);
  if(path.startsWith('/api/products'))return productsRoute(req,env,user,path);
